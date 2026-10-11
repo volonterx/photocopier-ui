@@ -16,8 +16,10 @@
  *
  *   .details .pcui-cover { background: #fffbe8 url(my-paper.jpg); }
  *
- * The scan bar is `.pcui-bar` (plus `.pcui-bar-light` or `.pcui-bar-line`) and can be
- * restyled the same way. Library styles use :where(), so any class selector wins.
+ * The scan bar is `.pcui-bar` (plus `.pcui-bar-light` or `.pcui-bar-line`). Its thickness is
+ * `barThickness`, in vw, and its gradient is generated for that thickness and set as the
+ * custom property `--pcui-bar-image`. Restyle it with a `background` on the bar class.
+ * Library styles use :where(), so any class selector wins.
  *
  * Sheets dispatches `pcui:motionstart` and `pcui:motionend` (bubbling) on the element.
  * The Overlay listens for these and uses a cheaper grade while things move.
@@ -34,6 +36,7 @@ export interface SheetsOptions {
   holdDuration: number;
   closeDuration: number;
   bar: BarKind;
+  barThickness: number | null;
   copyBackground: boolean;
   openEasing: string;
   closeEasing: string;
@@ -41,7 +44,7 @@ export interface SheetsOptions {
 }
 
 /** Per-call overrides for present(), reveal() and dismiss(). */
-export type CallOptions = Partial<Pick<SheetsOptions, 'scanDuration' | 'feedDuration' | 'holdDuration' | 'closeDuration' | 'bar'>>;
+export type CallOptions = Partial<Pick<SheetsOptions, 'scanDuration' | 'feedDuration' | 'holdDuration' | 'closeDuration' | 'bar' | 'barThickness'>>;
 
 export type MotionAction = 'present' | 'reveal' | 'dismiss';
 
@@ -69,6 +72,7 @@ export const defaults: SheetsOptions = {
   holdDuration: 250,    // ms pause between the slide and the scan
   closeDuration: 500,   // ms for dismiss() to slide the sheet down
   bar: 'light',         // 'light' | 'line' | 'none'
+  barThickness: null,   // bar thickness in vw (null = 4 for 'light', 2 for 'line'; 0 = no bar)
   copyBackground: true, // cover copies the element's background (else style .pcui-cover)
   openEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
   closeEasing: 'cubic-bezier(0.55, 0, 1, 0.45)',
@@ -83,10 +87,8 @@ const CSS = [
     'background-size:var(--pcui-cover-size,auto);background-repeat:var(--pcui-cover-repeat,repeat);' +
     'background-position:var(--pcui-cover-x,0) var(--pcui-cover-y,0)}',
   ':where(.pcui-bar){position:absolute;left:0;top:0;width:100%;will-change:transform;pointer-events:none}',
-  ':where(.pcui-bar-light){background:linear-gradient(to bottom,rgba(255,255,255,0) 0%,rgba(190,225,255,.45) 40%,' +
-    'rgba(255,255,255,.95) 50%,rgba(190,225,255,.45) 60%,rgba(255,255,255,0) 100%)}',
-  ':where(.pcui-bar-line){background:linear-gradient(to bottom,rgba(30,40,60,0) 0%,rgba(30,40,60,.14) 40%,' +
-    'rgba(30,40,60,.38) 50%,rgba(30,40,60,.14) 60%,rgba(30,40,60,0) 100%)}'
+  ':where(.pcui-bar-light),:where(.pcui-bar-line){background:var(--pcui-bar-image,none)}',
+  ':where(.pcui-bar-light){background-blend-mode:multiply}'
 ].join('\n');
 
 let styleInjected = false;
@@ -111,6 +113,52 @@ function isTransparent(color: string): boolean {
   return !color || color === 'transparent' || /rgba?\([^)]*,\s*0\)$/.test(color.replace(/\s+/g, ' '));
 }
 
+const band = (center: number, half: number, color: string): string =>
+  'linear-gradient(to bottom,transparent ' + (center - half).toFixed(2) + 'px,' + color + ' ' + center.toFixed(2) +
+  'px,transparent ' + (center + half).toFixed(2) + 'px)';
+
+// White base: eases (smoothstep) from transparent at the edges to solid white at 45% and 55%.
+function whiteBase(): string {
+  const stops: string[] = [];
+  for (let i = 0; i <= 9; i++) {
+    const t = i / 9, a = t * t * (3 - 2 * t);
+    stops.push('rgba(255,255,255,' + a.toFixed(3) + ') ' + (45 * t).toFixed(1) + '%');
+  }
+  for (let i = 0; i <= 9; i++) {
+    const t = 1 - i / 9, a = t * t * (3 - 2 * t);
+    stops.push('rgba(255,255,255,' + a.toFixed(3) + ') ' + (100 - 45 * t).toFixed(1) + '%');
+  }
+  return 'linear-gradient(to bottom,' + stops.join(',') + ')';
+}
+
+// Default bar thickness in vw.
+export const BAR_DEFAULT_VW: Record<'light' | 'line', number> = { light: 4, line: 2 };
+
+// Generates the bar's gradient for a thickness T (px).
+function barImage(kind: BarKind, T: number): string {
+  const c = T / 2;
+  const w = Math.min(3, Math.max(1, T * 0.025));
+  if (kind === 'line') {
+    const d = w * 1.4;
+    return [
+      band(c, w * 1.2, 'rgba(30,40,60,.5)'),
+      band(c - d, w, 'rgba(0,170,255,.14)'),
+      band(c + d, w, 'rgba(255,50,90,.12)'),
+      'linear-gradient(to bottom,rgba(30,40,60,0) 0%,rgba(30,40,60,.14) 40%,rgba(30,40,60,.38) 50%,rgba(30,40,60,.14) 60%,rgba(30,40,60,0) 100%)'
+    ].join(',');
+  }
+  // Light bar: three layers, multiplied together (see .pcui-bar-light in CSS), as shares of the thickness.
+  //   cyan   fades in from the top and peaks just above the center
+  //   pink   peaks just below the center and fades out toward the bottom
+  //   base   bright white, easing to transparent toward the top and bottom
+  // Where cyan and pink overlap they multiply into a washed-out gray-blue center line.
+  return [
+    'linear-gradient(to bottom,rgba(110,185,215,0) 22%,rgba(110,185,215,.55) 51%,rgba(110,185,215,0) 56%)',
+    'linear-gradient(to bottom,rgba(215,125,165,0) 44%,rgba(215,125,165,.5) 49%,rgba(215,125,165,0) 78%)',
+    whiteBase()
+  ].join(',');
+}
+
 function emit(el: HTMLElement, type: string, action: MotionAction): void {
   el.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { action } }));
 }
@@ -127,7 +175,8 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
       hold: num(call.holdDuration, num(o.holdDuration, 250)),
       scan: num(call.scanDuration, num(o.scanDuration, 2600)),
       close: num(call.closeDuration, num(o.closeDuration, 500)),
-      bar: call.bar || o.bar
+      bar: call.bar || o.bar,
+      thickness: call.barThickness != null ? num(call.barThickness, 0) : o.barThickness != null ? num(o.barThickness, 0) : null
     };
   }
 
@@ -151,9 +200,11 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
   }
 
   // Builds the scan layer: a clip box at the element's visible top holding the cover and bar.
-  function buildScan(el: HTMLElement, h: number, barKind: BarKind): ScanParts {
+  function buildScan(el: HTMLElement, h: number, barKind: BarKind, thickness: number | null): ScanParts {
     const top = el.scrollTop;
-    const barH = barKind === 'line' ? 28 : Math.max(60, Math.round(h * 0.14));
+    const vw = thickness == null && barKind !== 'none' ? BAR_DEFAULT_VW[barKind] : thickness || 0;
+    const hasBar = barKind !== 'none' && vw > 0;
+    const barH = hasBar ? Math.max(2, Math.round(vw * document.documentElement.clientWidth / 100)) : 0;
     const fx = document.createElement('div');
     fx.className = 'pcui-fx';
     fx.setAttribute('aria-hidden', 'true');
@@ -191,10 +242,11 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
     fx.appendChild(mask);
 
     let bar: HTMLDivElement | null = null;
-    if (barKind && barKind !== 'none') {
+    if (hasBar) {
       bar = document.createElement('div');
       bar.className = 'pcui-bar pcui-bar-' + barKind;
       bar.style.height = barH + 'px';
+      bar.style.setProperty('--pcui-bar-image', barImage(barKind, barH));
       fx.appendChild(bar);
     }
     el.appendChild(fx);
@@ -231,7 +283,7 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
 
     const restore = ensurePositioned(el);
     const h = el.clientHeight;
-    const parts = t.scan > 0 ? buildScan(el, h, t.bar) : null;
+    const parts = t.scan > 0 ? buildScan(el, h, t.bar, t.thickness) : null;
     emit(el, MOTION_START, 'present');
     const list = [anim(el, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }],
       { duration: t.feed, easing: o.openEasing, fill: 'backwards' })];
@@ -254,7 +306,7 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
 
     const restore = ensurePositioned(el);
     const h = el.clientHeight;
-    const parts = buildScan(el, h, t.bar);
+    const parts = buildScan(el, h, t.bar, t.thickness);
     emit(el, MOTION_START, 'reveal');
     const list = sweep(parts, h, t.scan, 0);
 

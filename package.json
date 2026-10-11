@@ -1,6 +1,6 @@
 {
   "name": "photocopier-ui",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "A color photocopy overlay and copier-style sheet transitions for web apps. Two parts, usable separately.",
   "type": "module",
   "main": "./lib/index.js",
@@ -27,7 +27,8 @@
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc && tsc -p demo --noEmit && tsc -p scripts",
     "start": "npm run build && tsx scripts/serve.ts",
-    "prepare": "tsx scripts/build.ts"
+    "prepare": "tsx scripts/build.ts",
+    "dev": "tsx scripts/dev.ts"
   },
   "keywords": [
     "photocopy",

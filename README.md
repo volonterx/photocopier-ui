@@ -5,7 +5,7 @@ A color photocopy look and copier-style transitions for web apps. It comes in tw
 - **Overlay** puts a color photocopy look over a live app: toner grain, drum streaks, dust, a lid shadow and a slight color drift. Every layer ignores clicks and touches, so the app keeps working.
 - **Sheets** animates modals and pages like a copier: a blank sheet slides up, a scan bar passes over it and reveals the content, and the sheet slides away again.
 
-No dependencies, no build step needed to use it. Backgrounds stay in your own CSS, so the main page and the modal can each have their own paper.
+Written in TypeScript, ships its own types, and has no runtime dependencies. Backgrounds stay in your own CSS, so the main page and the modal can each have their own paper.
 
 **Demo:** https://volonterx.github.io/photocopier-ui/
 
@@ -19,12 +19,15 @@ Script tag (everything, or one part only):
 <script src="dist/sheets.js"></script>           <!-- PhotocopierUI.Sheets only -->
 ```
 
-ES modules:
+ES modules (with TypeScript types included):
 
 ```js
 import { Overlay, Sheets } from 'photocopier-ui';
-import * as Sheets from 'photocopier-ui/sheets';   // one part only
+import * as SheetsOnly from 'photocopier-ui/sheets';     // one part only
+import * as OverlayOnly from 'photocopier-ui/overlay';
 ```
+
+Option and instance types are exported from the same paths, for example `SheetsOptions`, `CallOptions`, `BarKind`, `OverlayOptions` and `OverlayInit`.
 
 ## Overlay
 
@@ -34,8 +37,11 @@ const overlay = PhotocopierUI.Overlay.mount(document.body, { fixed: true, level:
 overlay.setLevel(0.6);       // 0 = off, 1 = strong
 overlay.setEnabled(false);   // show the original
 overlay.update({ hue: 10 }); // fine-tune single settings
-overlay.destroy();
+overlay.reroll();            // new random grain, streaks and dust
+overlay.destroy();           // remove everything and restore the page
 ```
+
+Read-only properties: `overlay.enabled`, `overlay.mode` (the mode actually in use, after fallbacks) and `overlay.options`. `Overlay.fromLevel(level)` returns the settings a level maps to, and `Overlay.isChromium()` tells whether the SVG backdrop mode is available.
 
 To cover a single container instead of the viewport, mount it on that element and leave out `fixed`.
 
@@ -48,6 +54,7 @@ To cover a single container instead of the viewport, mount it on that element an
 | `saturation`, `contrast`, `hue`, `cast`, `softness` | | Color: punch, contrast, color drift in degrees, warm or cool paper tint, toner bleed. |
 | `speckle`, `streaks`, `dust`, `edge` | | Texture amounts, 0 to 1. |
 | `misregistration`, `wobble`, `skew` | | SVG modes only, in pixels or degrees. |
+| `zIndex`, `seed` | `2147483000`, `7` | Stacking order of the layers, and the seed for the random textures. |
 | `liteDuringMotion` | `true` | Use the cheaper CSS grade while something animates (see below). |
 
 ## Sheets
@@ -68,12 +75,15 @@ The element you animate should cover the area it slides over (for a modal: posit
 | `feedDuration` | `700` | Milliseconds for `present()` to slide the sheet up. |
 | `holdDuration` | `250` | Pause between the slide and the scan. |
 | `closeDuration` | `500` | Milliseconds for `dismiss()` to slide the sheet down. |
-| `bar` | `'light'` | `'light'`, `'line'` or `'none'`. |
+| `bar` | `'light'` | `'light'` (a bright lamp with a washed-out cyan, pink and gray center), `'line'` (a thin dark line) or `'none'`. Both lines have a slight color fringe. |
+| `barThickness` | `null` | Bar thickness in `vw` (1 = 1% of the viewport width, read when the scan starts). `null` uses the default for the kind: `4` for `'light'`, `2` for `'line'` (exported as `Sheets.BAR_DEFAULT_VW`). `0` removes the bar. The gradient is generated for the thickness you set. |
 | `copyBackground` | `true` | The cover copies the element's background. |
 | `openEasing`, `closeEasing` | | CSS easing for the slides. |
 | `respectReducedMotion` | `true` | Skip animations when the user prefers reduced motion. |
 
-Change options later with `sheets.update({ ... })`, or per call: `sheets.present(el, { scanDuration: 1200 })`.
+Change options later with `sheets.update({ ... })`, or per call: `sheets.present(el, { scanDuration: 1200, bar: 'line', barThickness: 3 })`. Per-call options can set `scanDuration`, `feedDuration`, `holdDuration`, `closeDuration`, `bar` and `barThickness`.
+
+Other members: `sheets.isBusy(el)` is true while `el` is animating (a second call on it returns the running promise), `sheets.options` returns the current options, and `sheets.destroy()` jumps running animations to their end.
 
 Sheets doesn't manage focus. A typical modal makes the page behind it `inert` while it's open and moves focus in and back:
 
@@ -93,8 +103,15 @@ During the scan, a blank cover hides the content until the bar passes. By defaul
 
 ```css
 .details .pcui-cover { background: #fbf7e9 url(notepad.jpg); }
+```
+
+The bar is `.pcui-bar` plus `.pcui-bar-light` or `.pcui-bar-line`. Its gradient is generated for the current thickness and set as the custom property `--pcui-bar-image` on the bar, so you can replace it with your own background:
+
+```css
 .pcui-bar-light { background: linear-gradient(transparent, rgba(255, 240, 200, .9), transparent); }
 ```
+
+The light bar draws three gradients with `background-blend-mode: multiply`: a white base that eases to transparent at both edges, a cyan gradient and a pink one. Where the cyan and pink overlap they multiply into the thin gray-blue center line.
 
 The library's own styles use `:where()`, so any class selector of yours wins.
 
@@ -111,9 +128,10 @@ When both parts are on a page, Sheets dispatches `pcui:motionstart` and `pcui:mo
 ## Develop
 
 ```sh
-npm run build      # type-checks and compiles src/*.ts to lib/, regenerates dist/
-npm run typecheck  # tsc --noEmit
-npm start       # serves the repo at http://localhost:8080/demo/
+npm run build      # compiles src/, demo/ and checks scripts/; regenerates lib/, demo/demo.js and dist/
+npm run typecheck  # type-checks src/, demo/ and scripts/
+npm run dev        # serves http://localhost:8080/demo/, rebuilds and reloads the page on changes
+npm start          # builds once, then serves the same address
 ```
 
 `src/` holds the TypeScript sources; `lib/` (git-ignored) holds the compiled ES modules and `.d.ts` types the package exports. `demo/demo.ts` compiles to `demo/demo.js` (git-ignored); `npm start` builds first. `dist/` holds script-tag builds and is committed so the files can be used straight from the repo.

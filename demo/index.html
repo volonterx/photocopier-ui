@@ -120,6 +120,12 @@
           <label><input type="radio" name="bar" value="line">Line</label>
           <label><input type="radio" name="bar" value="none">None</label>
         </div>
+        <div class="row">
+          <label for="barThick">Bar thickness</label>
+          <output id="barThickOut" for="barThick"></output>
+          <input id="barThick" type="range" min="0" max="10" step="0.5" value="4">
+          <span class="scale" aria-hidden="true"><span>None</span><span>Thick</span></span>
+        </div>
         <p class="note">Changes apply to the next open or close. Sheets keep working with the overlay off.</p>
       </div>
     </aside>
@@ -127,14 +133,19 @@
 
   <section class="use">
     <h2>Use it on your app</h2>
-    <p>Load <code>dist/photocopier-ui.js</code> (or only <code>dist/overlay.js</code> or <code>dist/sheets.js</code>), or import <code>photocopier-ui</code> as an ES module. Your pages and the modal keep their own backgrounds; the modal covers the app and starts with the <code>hidden</code> attribute.</p>
+    <p>Load <code>dist/photocopier-ui.js</code> (or only <code>dist/overlay.js</code> or <code>dist/sheets.js</code>), or import <code>photocopier-ui</code> as an ES module, with TypeScript types included. Your pages and the modal keep their own backgrounds; the modal covers the app and starts with the <code>hidden</code> attribute. Scan bar and timing options can be set once in <code>create()</code>, changed with <code>sheets.update()</code> or passed per call.</p>
     <div class="code">
       <pre id="snippet">const overlay = PhotocopierUI.Overlay.mount(document.body, { fixed: true, level: 0.4 });
-const sheets = PhotocopierUI.Sheets.create({ scanDuration: 2600, feedDuration: 700, closeDuration: 500 });
+const sheets = PhotocopierUI.Sheets.create({
+  scanDuration: 2600, feedDuration: 700, closeDuration: 500,
+  bar: 'light',      // 'light' | 'line' | 'none'
+  barThickness: 4    // in vw (default: 4 for light, 2 for line; 0 = no bar)
+});
 
 row.addEventListener('click', () => {
   fillDetails(row.dataset.id);
   sheets.present(details);   // blank sheet slides up, then the scan reveals it
+  // sheets.present(details, { bar: 'line', barThickness: 3 }) overrides per call
 });
 backButton.addEventListener('click', () => sheets.dismiss(details));   // slides down</pre>
       <button class="btn" id="copyBtn" type="button">Copy</button>

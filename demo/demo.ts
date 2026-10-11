@@ -149,8 +149,17 @@
     inp.addEventListener('input', () => { show(); sheets.update({ [key]: +inp.value * 1000 }); });
   });
 
+  const thick = $<HTMLInputElement>('#barThick');
+  const showThick = () => { $('#barThickOut').textContent = thick.value + ' vw'; };
+  showThick();
+  thick.addEventListener('input', () => { showThick(); sheets.update({ barThickness: +thick.value }); });
+
   document.querySelectorAll<HTMLInputElement>('input[name="bar"]').forEach((r) => {
-    r.addEventListener('change', () => { if (r.checked) sheets.update({ bar: r.value as 'light' | 'line' | 'none' }); });
+    r.addEventListener('change', () => { if (r.checked) {
+      const bar = r.value as 'light' | 'line' | 'none';
+      if (bar !== 'none') { thick.value = String(Sheets.BAR_DEFAULT_VW[bar]); showThick(); }
+      sheets.update({ bar, barThickness: bar === 'none' ? null : +thick.value });
+    }; });
   });
 
   /* ---------- Copy snippet ---------- */
