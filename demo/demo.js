@@ -1,0 +1,163 @@
+(function () {
+  'use strict';
+  const $ = (s, r) => (r || document).querySelector(s);
+  const { Overlay, Sheets } = window.PhotocopierUI;
+
+  /* ---------- Sample data ---------- */
+  const LINES = {
+    A: { color: '#f2611c', stops: [['Kauppatori', 0], ['Suomenlinna main quay', 15]], vessel: 'MS Lokki', fare: '€5.90' },
+    B: { color: '#0a9f9a', stops: [['Kauppatori', 0], ['Lonna', 10]], vessel: 'MS Tiira', fare: '€4.50' },
+    C: { color: '#df2d86', stops: [['Kauppatori', 0], ['Lonna', 10], ['Vallisaari', 25]], vessel: 'MS Kuikka', fare: '€7.20' },
+    D: { color: '#2058d4', stops: [['Kauppatori', 0], ['Katajanokka', 8], ['Lonna', 18], ['Kauppatori', 35]], vessel: 'MS Haahka', fare: '€9.00' }
+  };
+  const DEPS = [
+    { t: '08:20', line: 'A', pier: '2', status: 'ok' },
+    { t: '08:50', line: 'B', pier: '3', status: 'board' },
+    { t: '09:15', line: 'A', pier: '2', status: 'ok' },
+    { t: '09:40', line: 'C', pier: '4', status: 'late' },
+    { t: '10:05', line: 'D', pier: '1', status: 'ok' },
+    { t: '10:20', line: 'A', pier: '2', status: 'ok' },
+    { t: '10:45', line: 'B', pier: '3', status: 'ok' },
+    { t: '11:10', line: 'C', pier: '4', status: 'ok' },
+    { t: '11:35', line: 'D', pier: '1', status: 'ok' }
+  ];
+  const STATUS = { ok: 'On time', board: 'Boarding', late: 'Delayed 5 min' };
+
+  const addMin = (t, m) => {
+    const [h, mm] = t.split(':').map(Number);
+    const x = h * 60 + mm + m;
+    return String(Math.floor(x / 60) % 24).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+  };
+  const dest = (L) => (L === 'D' ? 'Harbour loop' : LINES[L].stops[LINES[L].stops.length - 1][0]);
+  const via = (L) => {
+    const s = LINES[L].stops;
+    if (L === 'D') return 'via Katajanokka and Lonna';
+    return s.length > 2 ? 'via ' + s.slice(1, -1).map((x) => x[0]).join(', ') : 'Direct';
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const d = new Date();
+  $('#stamp').innerHTML = esc(d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()) + '<br>Sample timetable';
+
+  /* ---------- Departures list ---------- */
+  const list = $('#deps');
+  list.innerHTML = DEPS.map((dep, i) => {
+    const L = LINES[dep.line];
+    return '<li><button class="dep" type="button" data-i="' + i + '" aria-haspopup="dialog">' +
+      '<time>' + dep.t + '</time>' +
+      '<span><span class="to">' + esc(dest(dep.line)) + '</span><span class="via">' + esc(via(dep.line)) + ' · pier ' + dep.pier + '</span></span>' +
+      '<span class="end"><span class="chip ' + dep.status + '">' + STATUS[dep.status] + '</span>' +
+      '<span class="badge" style="background:' + L.color + '">' + dep.line + '</span>' +
+      '<span class="chev" aria-hidden="true">›</span></span>' +
+      '</button></li>';
+  }).join('');
+
+  /* ---------- Library setup ---------- */
+  const app = $('#app');
+  const level = $('#level');
+  const overlay = Overlay.mount($('#stage'), { target: app, level: level.value / 100 });
+  const sheets = Sheets.create({
+    scanDuration: +$('#scanDur').value * 1000,
+    feedDuration: +$('#openDur').value * 1000,
+    closeDuration: +$('#closeDur').value * 1000,
+    bar: 'light'
+  });
+
+  /* ---------- Details sheet ---------- */
+  const sheet = $('#sheet');
+  const mainPage = $('#mainPage');
+  const tickets = {};
+  let current = -1;
+  let opener = null;
+
+  function fill(i) {
+    const dep = DEPS[i], L = LINES[dep.line], last = L.stops[L.stops.length - 1];
+    current = i;
+    $('#dTime').textContent = dep.t;
+    const b = $('#dBadge'); b.textContent = dep.line; b.style.background = L.color;
+    $('#dRoute').textContent = dep.line === 'D' ? 'Harbour loop from Kauppatori' : 'Kauppatori → ' + last[0];
+    const st = $('#dStatus'); st.className = 'chip ' + dep.status; st.textContent = STATUS[dep.status];
+    $('#dPier').textContent = dep.pier;
+    $('#dDur').textContent = last[1] + ' min';
+    $('#dVessel').textContent = L.vessel;
+    $('#dFare').textContent = L.fare;
+    const stops = $('#dStops');
+    stops.style.setProperty('--line-c', L.color);
+    stops.innerHTML = L.stops.map((s) =>
+      '<li><time>' + addMin(dep.t, s[1] + (dep.status === 'late' ? 5 : 0)) + '</time><span>' + esc(s[0]) + '</span></li>'
+    ).join('');
+    const n = tickets[i] || 0;
+    $('#tripStatus').textContent = n ? n + (n === 1 ? ' ticket' : ' tickets') + ' on this departure.' : '';
+    $('#paxName').value = '';
+    $('#bike').checked = false;
+  }
+
+  function open(i, btn) {
+    if (sheets.isBusy(sheet) || !sheet.hidden) return;
+    opener = btn;
+    fill(i);
+    mainPage.inert = true;
+    sheets.present(sheet).then(() => $('#backBtn').focus({ preventScroll: true }));
+  }
+
+  function close() {
+    if (sheets.isBusy(sheet) || sheet.hidden) return;
+    sheets.dismiss(sheet).then(() => {
+      mainPage.inert = false;
+      if (opener) opener.focus({ preventScroll: true });
+    });
+  }
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.dep');
+    if (btn) open(+btn.dataset.i, btn);
+  });
+  $('#backBtn').addEventListener('click', close);
+  sheet.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+  $('#tripForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (current < 0) return;
+    tickets[current] = (tickets[current] || 0) + 1;
+    const name = $('#paxName').value.trim() || 'Guest';
+    const bike = $('#bike').checked ? ', with bicycle' : '';
+    $('#tripStatus').textContent = 'Ticket ' + tickets[current] + ' added for ' + name + bike + '.';
+    $('#paxName').value = '';
+    $('#bike').checked = false;
+  });
+
+  /* ---------- Controls ---------- */
+  const levelOut = $('#levelOut');
+  const showLevel = () => { levelOut.textContent = level.value + '%'; };
+  showLevel();
+  level.addEventListener('input', () => { showLevel(); overlay.setLevel(level.value / 100); });
+
+  const fx = $('#fx');
+  fx.addEventListener('change', () => { overlay.setEnabled(fx.checked); level.disabled = !fx.checked; });
+
+  [['scanDur', 'scanDuration'], ['openDur', 'feedDuration'], ['closeDur', 'closeDuration']].forEach(([id, key]) => {
+    const inp = $('#' + id), out = $('#' + id + 'Out');
+    const show = () => { out.textContent = (+inp.value).toFixed(1) + ' s'; };
+    show();
+    inp.addEventListener('input', () => { show(); sheets.update({ [key]: +inp.value * 1000 }); });
+  });
+
+  document.querySelectorAll('input[name="bar"]').forEach((r) => {
+    r.addEventListener('change', () => { if (r.checked) sheets.update({ bar: r.value }); });
+  });
+
+  /* ---------- Copy snippet ---------- */
+  const copyBtn = $('#copyBtn');
+  const snippet = $('#snippet');
+  copyBtn.addEventListener('click', () => {
+    const fallback = () => {
+      const r = document.createRange(); r.selectNodeContents(snippet);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      copyBtn.textContent = 'Selected';
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(snippet.textContent).then(() => { copyBtn.textContent = 'Copied'; }, fallback);
+    } else { fallback(); }
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+  });
+})();

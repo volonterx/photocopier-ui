@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>photocopier-ui demo</title>
+  <meta name="description" content="A color photocopy overlay and copier-style sheet transitions for web apps.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>photocopier-ui</h1>
+      <p class="lede">Tap any departure. A blank sheet feeds up from the bottom and the scanner copies the details onto it. Use Back to slide the sheet away. The two papers come from the demo's own CSS, not from the library.</p>
+    </div>
+    <a class="repo" href="https://github.com/volonterx/photocopier-ui">Source on GitHub</a>
+  </header>
+
+  <main class="demo">
+    <section class="stage-col" aria-label="Preview">
+      <div class="glass">
+        <div class="stage" id="stage">
+          <div class="app" id="app">
+            <div class="page paper-feed" id="mainPage">
+              <div class="page-in">
+                <div class="masthead">
+                  <div>
+                    <div class="brand"><i></i>Harbour Line</div>
+                    <h2>Departures from Kauppatori</h2>
+                  </div>
+                  <div class="stamp" id="stamp">Sample timetable</div>
+                </div>
+                <div class="cols" aria-hidden="true"><span>Time</span><span>Destination</span><span>Status</span></div>
+                <ul class="deps" id="deps" aria-label="Departures"></ul>
+                <p class="fine">Harbour Line is a made-up operator and these departures are sample data for the demo.</p>
+              </div>
+            </div>
+
+            <div class="sheet paper-notepad" id="sheet" role="dialog" aria-modal="true" aria-labelledby="dRoute" hidden>
+              <div class="sheet-in">
+                <button class="back" id="backBtn" type="button" aria-label="Back to departures">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                  Back
+                </button>
+                <div class="d-head">
+                  <div class="d-time" id="dTime"></div>
+                  <span class="badge" id="dBadge"></span>
+                  <h3 class="d-route" id="dRoute"></h3>
+                  <span class="chip" id="dStatus"></span>
+                </div>
+                <div class="scene" role="img" aria-label="Illustration of a ferry at sunset">
+                  <span class="sun"></span><span class="sea"></span><span class="sail"></span><span class="hull"></span>
+                </div>
+                <dl class="facts">
+                  <div><dt>Pier</dt><dd id="dPier"></dd></div>
+                  <div><dt>Crossing</dt><dd id="dDur"></dd></div>
+                  <div><dt>Vessel</dt><dd id="dVessel"></dd></div>
+                  <div><dt>Fare</dt><dd id="dFare"></dd></div>
+                </dl>
+                <div>
+                  <h4 class="sec-t">Stops</h4>
+                  <ol class="stops" id="dStops"></ol>
+                </div>
+                <form class="t-form" id="tripForm">
+                  <label for="paxName">Passenger name</label>
+                  <input id="paxName" type="text" placeholder="Aino Virtanen" autocomplete="off">
+                  <label class="chk" for="bike"><input id="bike" type="checkbox"> Bicycle on board</label>
+                  <button type="submit">Add ticket</button>
+                  <p class="t-status" id="tripStatus" aria-live="polite"></p>
+                </form>
+                <p class="fine">Boarding closes five minutes before departure. Children under seven travel free with an adult.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Demo controls">
+      <div class="group">
+        <h2>Overlay</h2>
+        <div class="row">
+          <label for="level">Mask level</label>
+          <output id="levelOut" for="level"></output>
+          <input id="level" type="range" min="0" max="100" step="1" value="40">
+          <span class="scale" aria-hidden="true"><span>Subtle</span><span>Strong</span></span>
+        </div>
+        <label class="switch"><input id="fx" type="checkbox" checked> Overlay on</label>
+      </div>
+      <hr class="sep">
+      <div class="group">
+        <h2>Sheets</h2>
+        <div class="row">
+          <label for="scanDur">Scan time</label>
+          <output id="scanDurOut" for="scanDur"></output>
+          <input id="scanDur" type="range" min="0.6" max="6" step="0.1" value="2.6">
+          <span class="scale" aria-hidden="true"><span>Fast</span><span>Slow</span></span>
+        </div>
+        <div class="row">
+          <label for="openDur">Open slide</label>
+          <output id="openDurOut" for="openDur"></output>
+          <input id="openDur" type="range" min="0.2" max="2" step="0.1" value="0.7">
+          <span class="scale" aria-hidden="true"><span>Fast</span><span>Slow</span></span>
+        </div>
+        <div class="row">
+          <label for="closeDur">Close slide</label>
+          <output id="closeDurOut" for="closeDur"></output>
+          <input id="closeDur" type="range" min="0.2" max="2" step="0.1" value="0.5">
+          <span class="scale" aria-hidden="true"><span>Fast</span><span>Slow</span></span>
+        </div>
+        <div class="row">
+          <span id="barLabel" style="font-weight:500">Scan bar</span>
+        </div>
+        <div class="seg" role="radiogroup" aria-labelledby="barLabel">
+          <label><input type="radio" name="bar" value="light" checked>Light</label>
+          <label><input type="radio" name="bar" value="line">Line</label>
+          <label><input type="radio" name="bar" value="none">None</label>
+        </div>
+        <p class="note">Changes apply to the next open or close. Sheets keep working with the overlay off.</p>
+      </div>
+    </aside>
+  </main>
+
+  <section class="use">
+    <h2>Use it on your app</h2>
+    <p>Load <code>dist/photocopier-ui.js</code> (or only <code>dist/overlay.js</code> or <code>dist/sheets.js</code>), or import <code>photocopier-ui</code> as an ES module. Your pages and the modal keep their own backgrounds; the modal covers the app and starts with the <code>hidden</code> attribute.</p>
+    <div class="code">
+      <pre id="snippet">const overlay = PhotocopierUI.Overlay.mount(document.body, { fixed: true, level: 0.4 });
+const sheets = PhotocopierUI.Sheets.create({ scanDuration: 2600, feedDuration: 700, closeDuration: 500 });
+
+row.addEventListener('click', () => {
+  fillDetails(row.dataset.id);
+  sheets.present(details);   // blank sheet slides up, then the scan reveals it
+});
+backButton.addEventListener('click', () => sheets.dismiss(details));   // slides down</pre>
+      <button class="btn" id="copyBtn" type="button">Copy</button>
+    </div>
+  </section>
+</div>
+
+<script src="../dist/photocopier-ui.js"></script>
+<script src="demo.js"></script>
+</body>
+</html>
