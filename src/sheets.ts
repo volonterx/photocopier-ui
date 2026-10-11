@@ -26,7 +26,44 @@
 const MOTION_START = 'pcui:motionstart';
 const MOTION_END = 'pcui:motionend';
 
-export const defaults = {
+export type BarKind = 'light' | 'line' | 'none';
+
+export interface SheetsOptions {
+  scanDuration: number;
+  feedDuration: number;
+  holdDuration: number;
+  closeDuration: number;
+  bar: BarKind;
+  copyBackground: boolean;
+  openEasing: string;
+  closeEasing: string;
+  respectReducedMotion: boolean;
+}
+
+/** Per-call overrides for present(), reveal() and dismiss(). */
+export type CallOptions = Partial<Pick<SheetsOptions, 'scanDuration' | 'feedDuration' | 'holdDuration' | 'closeDuration' | 'bar'>>;
+
+export type MotionAction = 'present' | 'reveal' | 'dismiss';
+
+export interface ScanParts {
+  fx: HTMLDivElement;
+  mask: HTMLDivElement;
+  cover: HTMLDivElement;
+  bar: HTMLDivElement | null;
+  barH: number;
+}
+
+export interface Sheets {
+  present(el: HTMLElement, call?: CallOptions): Promise<void>;
+  dismiss(el: HTMLElement, call?: CallOptions): Promise<void>;
+  reveal(el: HTMLElement, call?: CallOptions): Promise<void>;
+  update(patch?: Partial<SheetsOptions>): void;
+  isBusy(el: HTMLElement): boolean;
+  readonly options: SheetsOptions;
+  destroy(): void;
+}
+
+export const defaults: SheetsOptions = {
   scanDuration: 2600,   // ms for the bar to cross the element (0 = no scan)
   feedDuration: 700,    // ms for present() to slide the sheet up
   holdDuration: 250,    // ms pause between the slide and the scan
@@ -64,28 +101,27 @@ function injectStyle() {
   (document.head || document.documentElement).prepend(s);
 }
 
-function num(v, fallback) { v = +v; return Number.isFinite(v) && v >= 0 ? v : fallback; }
+function num(v: unknown, fallback: number): number { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : fallback; }
 
-function reducedMotion() {
+function reducedMotion(): boolean {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
-function isTransparent(color) {
+function isTransparent(color: string): boolean {
   return !color || color === 'transparent' || /rgba?\([^)]*,\s*0\)$/.test(color.replace(/\s+/g, ' '));
 }
 
-function emit(el, type, action) {
+function emit(el: HTMLElement, type: string, action: MotionAction): void {
   el.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { action } }));
 }
 
-export function create(opts = {}) {
+export function create(opts: Partial<SheetsOptions> = {}): Sheets {
   injectStyle();
-  const o = Object.assign({}, defaults, opts);
-  const busy = new WeakMap();
-  const running = new Set();
+  const o: SheetsOptions = Object.assign({}, defaults, opts);
+  const busy = new WeakMap<HTMLElement, Promise<void>>();
+  const running = new Set<Animation>();
 
-  function timing(call) {
-    call = call || {};
+  function timing(call: CallOptions = {}) {
     return {
       feed: num(call.feedDuration, num(o.feedDuration, 700)),
       hold: num(call.holdDuration, num(o.holdDuration, 250)),
@@ -95,19 +131,19 @@ export function create(opts = {}) {
     };
   }
 
-  function skipMotion() { return o.respectReducedMotion && reducedMotion(); }
+  function skipMotion(): boolean { return o.respectReducedMotion && reducedMotion(); }
 
-  function anim(el, frames, t) {
+  function anim(el: HTMLElement, frames: Keyframe[], t: KeyframeAnimationOptions): Animation {
     const a = el.animate(frames, t);
     running.add(a);
     return a;
   }
 
-  function settle(list) {
-    return Promise.all(list.map((a) => a.finished.catch(() => {}).then(() => running.delete(a))));
+  function settle(list: Animation[]): Promise<void> {
+    return Promise.all(list.map((a) => a.finished.catch(() => {}).then(() => { running.delete(a); }))).then(() => {});
   }
 
-  function ensurePositioned(el) {
+  function ensurePositioned(el: HTMLElement): () => void {
     if (getComputedStyle(el).position !== 'static') return () => {};
     const prev = el.style.position;
     el.style.position = 'relative';
@@ -115,7 +151,7 @@ export function create(opts = {}) {
   }
 
   // Builds the scan layer: a clip box at the element's visible top holding the cover and bar.
-  function buildScan(el, h, barKind) {
+  function buildScan(el: HTMLElement, h: number, barKind: BarKind): ScanParts {
     const top = el.scrollTop;
     const barH = barKind === 'line' ? 28 : Math.max(60, Math.round(h * 0.14));
     const fx = document.createElement('div');
@@ -146,7 +182,7 @@ export function create(opts = {}) {
         cover.style.setProperty('--pcui-cover-repeat', cs.backgroundRepeat);
         cover.style.setProperty('--pcui-cover-x', cs.backgroundPositionX);
         // A background that scrolls with the content is offset by how far the element is scrolled.
-        const local = /local/.test(cs.backgroundAttachment) && top;
+        const local = /local/.test(cs.backgroundAttachment) && top !== 0;
         const ys = cs.backgroundPositionY.split(',').map((y) => (local ? 'calc(' + y.trim() + ' - ' + top + 'px)' : y.trim()));
         cover.style.setProperty('--pcui-cover-y', ys.join(', '));
       }
@@ -154,7 +190,7 @@ export function create(opts = {}) {
     mask.appendChild(cover);
     fx.appendChild(mask);
 
-    let bar = null;
+    let bar: HTMLDivElement | null = null;
     if (barKind && barKind !== 'none') {
       bar = document.createElement('div');
       bar.className = 'pcui-bar pcui-bar-' + barKind;
@@ -167,8 +203,8 @@ export function create(opts = {}) {
 
   // The bar's center travels from the top edge to past the bottom. The cover's top edge
   // follows it, while the cover's paper moves the other way so it appears to stay put.
-  function sweep(parts, h, duration, delay) {
-    const t = { duration, delay, easing: 'linear', fill: 'both' };
+  function sweep(parts: ScanParts, h: number, duration: number, delay: number): Animation[] {
+    const t: KeyframeAnimationOptions = { duration, delay, easing: 'linear', fill: 'both' };
     const b = parts.barH;
     const list = [
       anim(parts.mask, [{ transform: 'translateY(' + (-b / 2) + 'px)' }, { transform: 'translateY(' + (h + b / 2) + 'px)' }], t),
@@ -180,14 +216,14 @@ export function create(opts = {}) {
     return list;
   }
 
-  function track(el, promise) {
+  function track(el: HTMLElement, promise: Promise<void>): Promise<void> {
     busy.set(el, promise);
     return promise.finally(() => busy.delete(el));
   }
 
   /** Slides `el` up as a blank sheet, then scans its content in. Removes `hidden` first. */
-  function present(el, call) {
-    if (busy.has(el)) return busy.get(el);
+  function present(el: HTMLElement, call?: CallOptions): Promise<void> {
+    if (busy.has(el)) return busy.get(el)!;
     const t = timing(call);
     el.hidden = false;
     el.scrollTop = 0;
@@ -210,8 +246,8 @@ export function create(opts = {}) {
   }
 
   /** Scans content into `el` in place, without sliding. Useful for page loads and content swaps. */
-  function reveal(el, call) {
-    if (busy.has(el)) return busy.get(el);
+  function reveal(el: HTMLElement, call?: CallOptions): Promise<void> {
+    if (busy.has(el)) return busy.get(el)!;
     const t = timing(call);
     el.hidden = false;
     if (skipMotion() || !el.animate || t.scan <= 0) return Promise.resolve();
@@ -231,8 +267,8 @@ export function create(opts = {}) {
   }
 
   /** Slides `el` down out of view, then sets `hidden`. */
-  function dismiss(el, call) {
-    if (busy.has(el)) return busy.get(el);
+  function dismiss(el: HTMLElement, call?: CallOptions): Promise<void> {
+    if (busy.has(el)) return busy.get(el)!;
     const t = timing(call);
     if (skipMotion() || !el.animate) { el.hidden = true; return Promise.resolve(); }
 
@@ -251,8 +287,8 @@ export function create(opts = {}) {
     present,
     dismiss,
     reveal,
-    update(patch) { Object.assign(o, patch || {}); },
-    isBusy(el) { return busy.has(el); },
+    update(patch?: Partial<SheetsOptions>) { Object.assign(o, patch || {}); },
+    isBusy(el: HTMLElement) { return busy.has(el); },
     get options() { return Object.assign({}, o); },
     /** Jumps any running animation to its end. */
     destroy() { running.forEach((a) => a.finish()); running.clear(); }

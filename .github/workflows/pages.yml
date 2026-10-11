@@ -30,7 +30,7 @@ jobs:
           node-version: 20
 
       - name: Build dist
-        run: node scripts/build.js
+        run: npm ci && npm run build
 
       - name: Assemble site
         run: |

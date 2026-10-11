@@ -26,10 +26,52 @@
 
 const MOTION_START = 'pcui:motionstart';
 const MOTION_END = 'pcui:motionend';
-const TEX_KEYS = { speckle: 1, streaks: 1, dust: 1, edge: 1, seed: 1, cast: 1 };
+const TEX_KEYS: Record<string, 1> = { speckle: 1, streaks: 1, dust: 1, edge: 1, seed: 1, cast: 1 };
 let seq = 0;
 
-export const defaults = {
+export type Mode = 'overlay' | 'svg-backdrop' | 'filter';
+
+export interface OverlayOptions {
+  mode: Mode;
+  fixed: boolean;
+  target: HTMLElement | null;
+  zIndex: number;
+  saturation: number;
+  contrast: number;
+  hue: number;
+  cast: number;
+  softness: number;
+  speckle: number;
+  streaks: number;
+  dust: number;
+  edge: number;
+  misregistration: number;
+  wobble: number;
+  skew: number;
+  seed: number;
+  liteDuringMotion: boolean;
+}
+
+/** Options accepted by mount() and update(): any option, plus `level` as a shortcut. */
+export type OverlayInit = Partial<OverlayOptions> & { level?: number };
+
+/** The grade-related options that `fromLevel` derives from a single level. */
+export type GradeOptions = Pick<OverlayOptions, 'saturation' | 'contrast' | 'hue' | 'cast' | 'softness' |
+  'speckle' | 'streaks' | 'dust' | 'edge' | 'misregistration' | 'wobble' | 'skew'>;
+
+export interface Overlay {
+  update(patch?: OverlayInit): void;
+  setLevel(level: number): void;
+  setEnabled(on: boolean): void;
+  reroll(): void;
+  destroy(): void;
+  readonly enabled: boolean;
+  /** The mode actually in use, after fallbacks. */
+  readonly mode: Mode;
+  readonly options: OverlayOptions;
+}
+
+export const defaults: OverlayOptions = {
   mode: 'overlay',
   fixed: false,         // true: layers are position:fixed and cover the viewport
   target: null,         // element graded in 'filter' mode (fixed mode default: <html>)
@@ -50,9 +92,9 @@ export const defaults = {
   liteDuringMotion: true
 };
 
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function clamp(v: number, a: number, b: number): number { return Math.max(a, Math.min(b, v)); }
 
-function rng(seed) {
+function rng(seed: number): () => number {
   let a = seed >>> 0;
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -62,15 +104,15 @@ function rng(seed) {
   };
 }
 
-export function isChromium() {
-  const b = navigator.userAgentData && navigator.userAgentData.brands;
+export function isChromium(): boolean {
+  const b = (navigator as Navigator & { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands;
   if (b) return b.some((x) => /Chromium/.test(x.brand));
   return /Chrome\//.test(navigator.userAgent) && !/Firefox\//.test(navigator.userAgent);
 }
 
 // S-curve with blown whites and crushed blacks, sampled into 17 table entries.
-function curveTable(c) {
-  const k = 1 + 1.7 * c, n = 17, out = [];
+function curveTable(c: number): string {
+  const k = 1 + 1.7 * c, n = 17, out: string[] = [];
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1);
     const s = t < 0.5 ? 0.5 * Math.pow(2 * t, k) : 1 - 0.5 * Math.pow(2 * (1 - t), k);
@@ -82,7 +124,7 @@ function curveTable(c) {
 }
 
 /** One knob for everything: 0 = off, 1 = strong. Tuned so text stays comfortable to read. */
-export function fromLevel(level) {
+export function fromLevel(level: number): GradeOptions {
   const L = clamp(+level || 0, 0, 1);
   return {
     saturation: 1 + 0.4 * L,
@@ -100,16 +142,16 @@ export function fromLevel(level) {
   };
 }
 
-export function mount(host, opts = {}) {
-  host = host || document.body;
-  const o = Object.assign({}, defaults, opts.level != null ? fromLevel(opts.level) : {}, opts);
-  delete o.level;
+export function mount(hostEl?: HTMLElement | null, opts: OverlayInit = {}): Overlay {
+  const host = hostEl || document.body;
+  const { level, ...rest } = opts;
+  const o: OverlayOptions = Object.assign({}, defaults, level != null ? fromLevel(level) : {}, rest);
   const fixed = !!o.fixed;
   const uid = 'pcui-filter-' + (++seq);
   const target = o.target || (fixed ? document.documentElement : null);
   let enabled = true;
   let raf = 0;
-  let effective = 'overlay';
+  let effective: Mode = 'overlay';
   let motion = 0;
 
   const saved = {
@@ -155,7 +197,7 @@ export function mount(host, opts = {}) {
     '</feComponentTransfer>' +
     '</filter>';
   document.body.appendChild(svg);
-  const q = (k) => svg.querySelector('[data-k="' + k + '"]');
+  const q = (k: string) => svg.querySelector('[data-k="' + k + '"]')!;
   const f = {
     wn: q('wn'), warp: q('warp'), sat: q('sat'), hue: q('hue'),
     ro: q('ro'), bo: q('bo'), blur: q('blur'), cr: q('cr'), cg: q('cg'), cb: q('cb')
@@ -179,7 +221,7 @@ export function mount(host, opts = {}) {
   }
 
   /* ---------- Layers ---------- */
-  function layer(tag, name, z, blend) {
+  function layer<K extends 'div' | 'canvas'>(tag: K, name: string, z: number, blend?: string): HTMLElementTagNameMap[K] {
     const d = document.createElement(tag);
     const s = d.style;
     s.position = fixed ? 'fixed' : 'absolute';
@@ -207,12 +249,12 @@ export function mount(host, opts = {}) {
       (o.softness > 0.08 ? ' blur(' + (o.softness * 0.9).toFixed(2) + 'px)' : '');
   }
 
-  function setBackdrop(v) {
+  function setBackdrop(v: string) {
     tone.style.setProperty('-webkit-backdrop-filter', v);
     tone.style.setProperty('backdrop-filter', v);
   }
 
-  function effectiveMode() {
+  function effectiveMode(): Mode {
     let m = o.mode;
     if (m === 'svg-backdrop' && !isChromium()) m = 'overlay';
     if (m === 'filter' && !target) m = 'overlay';
@@ -261,13 +303,13 @@ export function mount(host, opts = {}) {
   }
 
   /* ---------- Textures ---------- */
-  let grainTile = null, dropTile = null;
+  let grainTile: HTMLCanvasElement | null = null, dropTile: HTMLCanvasElement | null = null;
 
   function buildTiles() {
     const T = 512, R = rng(o.seed * 31 + 7);
     grainTile = document.createElement('canvas');
     grainTile.width = grainTile.height = T;
-    let g = grainTile.getContext('2d');
+    let g = grainTile.getContext('2d')!;
     let im = g.createImageData(T, T), p = im.data;
     for (let i = 0; i < T * T; i++) {
       const v = 255 - R() * 60;
@@ -284,7 +326,7 @@ export function mount(host, opts = {}) {
 
     dropTile = document.createElement('canvas');
     dropTile.width = dropTile.height = T;
-    g = dropTile.getContext('2d');
+    g = dropTile.getContext('2d')!;
     im = g.createImageData(T, T); p = im.data;
     for (let i = 0; i < T * T; i++) {
       const w = R() < 0.004 ? 120 + R() * 135 : 0;
@@ -302,7 +344,7 @@ export function mount(host, opts = {}) {
     const cw = Math.ceil(w / s), ch = Math.ceil(h / s);
     dark.width = light.width = cw;
     dark.height = light.height = ch;
-    const d = dark.getContext('2d'), l = light.getContext('2d');
+    const d = dark.getContext('2d')!, l = light.getContext('2d')!;
 
     d.globalCompositeOperation = 'source-over'; d.globalAlpha = 1;
     d.fillStyle = castColor(); d.fillRect(0, 0, cw, ch);
@@ -313,7 +355,7 @@ export function mount(host, opts = {}) {
     // Uneven toner: soft colored blotches
     const cell = 46, mw = Math.ceil(w / cell) + 2, mh = Math.ceil(h / cell) + 2;
     const mc = document.createElement('canvas'); mc.width = mw; mc.height = mh;
-    const mctx = mc.getContext('2d'), imgd = mctx.createImageData(mw, mh);
+    const mctx = mc.getContext('2d')!, imgd = mctx.createImageData(mw, mh);
     const R1 = rng(o.seed * 13 + 5), amp = 55 * o.speckle;
     for (let i = 0; i < mw * mh; i++) {
       imgd.data[i * 4] = 255 - R1() * amp;
@@ -329,12 +371,12 @@ export function mount(host, opts = {}) {
     // Fine grain and specks
     if (grainTile && o.speckle > 0) {
       d.globalAlpha = clamp(o.speckle, 0, 1);
-      d.fillStyle = d.createPattern(grainTile, 'repeat');
+      d.fillStyle = d.createPattern(grainTile, 'repeat')!;
       d.fillRect(0, 0, cw, ch);
       d.globalAlpha = 1;
       l.globalCompositeOperation = 'lighter';
       l.globalAlpha = clamp(o.speckle * 1.2, 0, 1);
-      l.fillStyle = l.createPattern(dropTile, 'repeat');
+      l.fillStyle = l.createPattern(dropTile!, 'repeat')!;
       l.fillRect(0, 0, cw, ch);
       l.globalAlpha = 1;
     }
@@ -396,7 +438,7 @@ export function mount(host, opts = {}) {
       rg.addColorStop(1, 'rgba(60,40,40,' + (0.5 * e).toFixed(3) + ')');
       d.fillStyle = rg; d.fillRect(0, 0, cw, ch);
 
-      const edgeFill = (x0, y0, x1, y1, alpha, rx, ry, rw, rh) => {
+      const edgeFill = (x0: number, y0: number, x1: number, y1: number, alpha: number, rx: number, ry: number, rw: number, rh: number) => {
         const lg = d.createLinearGradient(x0, y0, x1, y1);
         lg.addColorStop(0, 'rgba(0,0,0,' + (alpha * e).toFixed(3) + ')');
         lg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -439,7 +481,7 @@ export function mount(host, opts = {}) {
     });
   }
 
-  let ro = null;
+  let ro: ResizeObserver | null = null;
   if (!fixed && typeof ResizeObserver !== 'undefined') {
     ro = new ResizeObserver(schedule);
     ro.observe(host);
@@ -448,8 +490,8 @@ export function mount(host, opts = {}) {
   }
 
   /* ---------- Motion hint from Sheets (or anything else) ---------- */
-  function onMotion(e) {
-    if (!fixed && !host.contains(e.target)) return;
+  function onMotion(e: Event) {
+    if (!fixed && !host.contains(e.target as Node | null)) return;
     motion = Math.max(0, motion + (e.type === MOTION_START ? 1 : -1));
     applyMode();
   }
@@ -457,18 +499,21 @@ export function mount(host, opts = {}) {
   document.addEventListener(MOTION_END, onMotion);
 
   /* ---------- Public API ---------- */
-  function update(patch = {}) {
-    if (patch.level != null) {
-      const lv = fromLevel(patch.level);
-      for (const k in patch) if (k !== 'level') lv[k] = patch[k];
-      patch = lv;
+  function update(input: OverlayInit = {}) {
+    let patch: Partial<OverlayOptions> & Record<string, unknown>;
+    if (input.level != null) {
+      const { level: lv, ...others } = input;
+      patch = { ...fromLevel(lv!), ...others };
+    } else {
+      patch = { ...input };
+      delete patch.level;
     }
     let texDirty = false, seedDirty = false;
     for (const k in patch) {
       if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
       if (!(k in defaults) || k === 'target' || k === 'fixed' || k === 'zIndex') continue;
-      if (o[k] !== patch[k]) {
-        o[k] = patch[k];
+      if ((o as unknown as Record<string, unknown>)[k] !== patch[k]) {
+        (o as unknown as Record<string, unknown>)[k] = patch[k];
         if (TEX_KEYS[k]) texDirty = true;
         if (k === 'seed') seedDirty = true;
       }
@@ -479,7 +524,7 @@ export function mount(host, opts = {}) {
     if (texDirty) schedule();
   }
 
-  function setEnabled(on) {
+  function setEnabled(on: boolean) {
     enabled = !!on;
     layers.forEach((n) => { n.style.display = enabled ? '' : 'none'; });
     applyMode();
@@ -507,7 +552,7 @@ export function mount(host, opts = {}) {
 
   return {
     update,
-    setLevel: (level) => update({ level }),
+    setLevel: (level: number) => update({ level }),
     setEnabled,
     reroll: () => update({ seed: 1 + Math.floor(Math.random() * 100000) }),
     destroy,

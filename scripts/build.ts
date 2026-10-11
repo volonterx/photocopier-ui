@@ -1,23 +1,29 @@
-// Builds script-tag files in dist/ from the ES modules in src/. No dependencies.
+// Compiles src/*.ts to lib/ (ES modules + .d.ts) with tsc, then builds script-tag files in dist/ from lib/.
 //
 //   dist/photocopier-ui.js   window.PhotocopierUI.Overlay and window.PhotocopierUI.Sheets
 //   dist/overlay.js          window.PhotocopierUI.Overlay only
 //   dist/sheets.js           window.PhotocopierUI.Sheets only
 //
-// The src/ files are plain ES modules and can be imported directly (see package.json "exports").
+// lib/ holds the ES modules and type declarations that package.json "exports" points at.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+rmSync(join(root, 'lib'), { recursive: true, force: true });
+for (const project of [root, join(root, 'demo'), join(root, 'scripts')]) {
+  execFileSync(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', project], { stdio: 'inherit' });
+}
+
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
-function wrap(file, name) {
-  let code = readFileSync(join(root, 'src', file), 'utf8');
+function wrap(file: string, name: string): string {
+  let code = readFileSync(join(root, 'lib', file), 'utf8');
   if (/^\s*import\s/m.test(code)) throw new Error(file + ': imports are not supported by this build');
-  const names = [];
-  code = code.replace(/^export\s+(const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm, (m, kind, id) => {
+  const names: string[] = [];
+  code = code.replace(/^export\s+(const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm, (_m, kind: string, id: string) => {
     names.push(id);
     return kind + ' ' + id;
   });
@@ -35,7 +41,7 @@ function wrap(file, name) {
   ].join('\n');
 }
 
-const banner = (what) => '/*! photocopier-ui v' + pkg.version + ' | ' + what + ' | script-tag build, generated from src/ */\n';
+const banner = (what: string) => '/*! photocopier-ui v' + pkg.version + ' | ' + what + ' | script-tag build, generated from src/*.ts */\n';
 const overlay = wrap('overlay.js', 'Overlay');
 const sheets = wrap('sheets.js', 'Sheets');
 

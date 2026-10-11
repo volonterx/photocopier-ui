@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT) || 8080;
-const types = {
+const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
@@ -17,7 +17,7 @@ const types = {
 
 createServer(async (req, res) => {
   try {
-    let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    let path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     if (path === '/') { res.writeHead(302, { Location: '/demo/' }); return res.end(); }
     let file = normalize(join(root, path));
     if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }

@@ -111,11 +111,12 @@ When both parts are on a page, Sheets dispatches `pcui:motionstart` and `pcui:mo
 ## Develop
 
 ```sh
-npm run build   # regenerates dist/ from src/
+npm run build      # type-checks and compiles src/*.ts to lib/, regenerates dist/
+npm run typecheck  # tsc --noEmit
 npm start       # serves the repo at http://localhost:8080/demo/
 ```
 
-`src/` holds the ES modules. `dist/` holds script-tag builds and is committed so the files can be used straight from the repo.
+`src/` holds the TypeScript sources; `lib/` (git-ignored) holds the compiled ES modules and `.d.ts` types the package exports. `demo/demo.ts` compiles to `demo/demo.js` (git-ignored); `npm start` builds first. `dist/` holds script-tag builds and is committed so the files can be used straight from the repo.
 
 ## Demo on GitHub Pages
 

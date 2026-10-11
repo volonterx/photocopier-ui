@@ -1,16 +1,23 @@
 (function () {
   'use strict';
-  const $ = (s, r) => (r || document).querySelector(s);
-  const { Overlay, Sheets } = window.PhotocopierUI;
+  const $ = <T extends HTMLElement = HTMLElement>(s: string, r?: ParentNode): T => (r || document).querySelector<T>(s)!;
+  const { Overlay, Sheets } = (window as unknown as {
+    PhotocopierUI: { Overlay: typeof import('../lib/overlay.js'); Sheets: typeof import('../lib/sheets.js') };
+  }).PhotocopierUI;
+
+  type Status = 'ok' | 'board' | 'late';
+  type LineId = 'A' | 'B' | 'C' | 'D';
+  interface Line { color: string; stops: [string, number][]; vessel: string; fare: string }
+  interface Departure { t: string; line: LineId; pier: string; status: Status }
 
   /* ---------- Sample data ---------- */
-  const LINES = {
+  const LINES: Record<LineId, Line> = {
     A: { color: '#f2611c', stops: [['Kauppatori', 0], ['Suomenlinna main quay', 15]], vessel: 'MS Lokki', fare: '€5.90' },
     B: { color: '#0a9f9a', stops: [['Kauppatori', 0], ['Lonna', 10]], vessel: 'MS Tiira', fare: '€4.50' },
     C: { color: '#df2d86', stops: [['Kauppatori', 0], ['Lonna', 10], ['Vallisaari', 25]], vessel: 'MS Kuikka', fare: '€7.20' },
     D: { color: '#2058d4', stops: [['Kauppatori', 0], ['Katajanokka', 8], ['Lonna', 18], ['Kauppatori', 35]], vessel: 'MS Haahka', fare: '€9.00' }
   };
-  const DEPS = [
+  const DEPS: Departure[] = [
     { t: '08:20', line: 'A', pier: '2', status: 'ok' },
     { t: '08:50', line: 'B', pier: '3', status: 'board' },
     { t: '09:15', line: 'A', pier: '2', status: 'ok' },
@@ -21,20 +28,20 @@
     { t: '11:10', line: 'C', pier: '4', status: 'ok' },
     { t: '11:35', line: 'D', pier: '1', status: 'ok' }
   ];
-  const STATUS = { ok: 'On time', board: 'Boarding', late: 'Delayed 5 min' };
+  const STATUS: Record<Status, string> = { ok: 'On time', board: 'Boarding', late: 'Delayed 5 min' };
 
-  const addMin = (t, m) => {
+  const addMin = (t: string, m: number) => {
     const [h, mm] = t.split(':').map(Number);
     const x = h * 60 + mm + m;
     return String(Math.floor(x / 60) % 24).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
   };
-  const dest = (L) => (L === 'D' ? 'Harbour loop' : LINES[L].stops[LINES[L].stops.length - 1][0]);
-  const via = (L) => {
+  const dest = (L: LineId) => (L === 'D' ? 'Harbour loop' : LINES[L].stops[LINES[L].stops.length - 1][0]);
+  const via = (L: LineId) => {
     const s = LINES[L].stops;
     if (L === 'D') return 'via Katajanokka and Lonna';
     return s.length > 2 ? 'via ' + s.slice(1, -1).map((x) => x[0]).join(', ') : 'Direct';
   };
-  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c as '&' | '<' | '>' | '"']));
 
   const d = new Date();
   $('#stamp').innerHTML = esc(d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()) + '<br>Sample timetable';
@@ -54,23 +61,23 @@
 
   /* ---------- Library setup ---------- */
   const app = $('#app');
-  const level = $('#level');
-  const overlay = Overlay.mount($('#stage'), { target: app, level: level.value / 100 });
+  const level = $<HTMLInputElement>('#level');
+  const overlay = Overlay.mount($('#stage'), { target: app, level: +level.value / 100 });
   const sheets = Sheets.create({
-    scanDuration: +$('#scanDur').value * 1000,
-    feedDuration: +$('#openDur').value * 1000,
-    closeDuration: +$('#closeDur').value * 1000,
+    scanDuration: +$<HTMLInputElement>('#scanDur').value * 1000,
+    feedDuration: +$<HTMLInputElement>('#openDur').value * 1000,
+    closeDuration: +$<HTMLInputElement>('#closeDur').value * 1000,
     bar: 'light'
   });
 
   /* ---------- Details sheet ---------- */
   const sheet = $('#sheet');
   const mainPage = $('#mainPage');
-  const tickets = {};
+  const tickets: Record<number, number> = {};
   let current = -1;
-  let opener = null;
+  let opener: HTMLElement | null = null;
 
-  function fill(i) {
+  function fill(i: number) {
     const dep = DEPS[i], L = LINES[dep.line], last = L.stops[L.stops.length - 1];
     current = i;
     $('#dTime').textContent = dep.t;
@@ -88,29 +95,29 @@
     ).join('');
     const n = tickets[i] || 0;
     $('#tripStatus').textContent = n ? n + (n === 1 ? ' ticket' : ' tickets') + ' on this departure.' : '';
-    $('#paxName').value = '';
-    $('#bike').checked = false;
+    $<HTMLInputElement>('#paxName').value = '';
+    $<HTMLInputElement>('#bike').checked = false;
   }
 
-  function open(i, btn) {
+  function open(i: number, btn: HTMLElement) {
     if (sheets.isBusy(sheet) || !sheet.hidden) return;
     opener = btn;
     fill(i);
-    mainPage.inert = true;
+    (mainPage as HTMLElement & { inert: boolean }).inert = true;
     sheets.present(sheet).then(() => $('#backBtn').focus({ preventScroll: true }));
   }
 
   function close() {
     if (sheets.isBusy(sheet) || sheet.hidden) return;
     sheets.dismiss(sheet).then(() => {
-      mainPage.inert = false;
+      (mainPage as HTMLElement & { inert: boolean }).inert = false;
       if (opener) opener.focus({ preventScroll: true });
     });
   }
 
   list.addEventListener('click', (e) => {
-    const btn = e.target.closest('.dep');
-    if (btn) open(+btn.dataset.i, btn);
+    const btn = (e.target as Element).closest<HTMLElement>('.dep');
+    if (btn) open(Number(btn.dataset.i), btn);
   });
   $('#backBtn').addEventListener('click', close);
   sheet.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
@@ -119,31 +126,31 @@
     e.preventDefault();
     if (current < 0) return;
     tickets[current] = (tickets[current] || 0) + 1;
-    const name = $('#paxName').value.trim() || 'Guest';
-    const bike = $('#bike').checked ? ', with bicycle' : '';
+    const name = $<HTMLInputElement>('#paxName').value.trim() || 'Guest';
+    const bike = $<HTMLInputElement>('#bike').checked ? ', with bicycle' : '';
     $('#tripStatus').textContent = 'Ticket ' + tickets[current] + ' added for ' + name + bike + '.';
-    $('#paxName').value = '';
-    $('#bike').checked = false;
+    $<HTMLInputElement>('#paxName').value = '';
+    $<HTMLInputElement>('#bike').checked = false;
   });
 
   /* ---------- Controls ---------- */
   const levelOut = $('#levelOut');
   const showLevel = () => { levelOut.textContent = level.value + '%'; };
   showLevel();
-  level.addEventListener('input', () => { showLevel(); overlay.setLevel(level.value / 100); });
+  level.addEventListener('input', () => { showLevel(); overlay.setLevel(+level.value / 100); });
 
-  const fx = $('#fx');
+  const fx = $<HTMLInputElement>('#fx');
   fx.addEventListener('change', () => { overlay.setEnabled(fx.checked); level.disabled = !fx.checked; });
 
-  [['scanDur', 'scanDuration'], ['openDur', 'feedDuration'], ['closeDur', 'closeDuration']].forEach(([id, key]) => {
-    const inp = $('#' + id), out = $('#' + id + 'Out');
+  ([['scanDur', 'scanDuration'], ['openDur', 'feedDuration'], ['closeDur', 'closeDuration']] as const).forEach(([id, key]) => {
+    const inp = $<HTMLInputElement>('#' + id), out = $('#' + id + 'Out');
     const show = () => { out.textContent = (+inp.value).toFixed(1) + ' s'; };
     show();
     inp.addEventListener('input', () => { show(); sheets.update({ [key]: +inp.value * 1000 }); });
   });
 
-  document.querySelectorAll('input[name="bar"]').forEach((r) => {
-    r.addEventListener('change', () => { if (r.checked) sheets.update({ bar: r.value }); });
+  document.querySelectorAll<HTMLInputElement>('input[name="bar"]').forEach((r) => {
+    r.addEventListener('change', () => { if (r.checked) sheets.update({ bar: r.value as 'light' | 'line' | 'none' }); });
   });
 
   /* ---------- Copy snippet ---------- */
@@ -152,11 +159,11 @@
   copyBtn.addEventListener('click', () => {
     const fallback = () => {
       const r = document.createRange(); r.selectNodeContents(snippet);
-      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      const s = getSelection()!; s.removeAllRanges(); s.addRange(r);
       copyBtn.textContent = 'Selected';
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(snippet.textContent).then(() => { copyBtn.textContent = 'Copied'; }, fallback);
+      navigator.clipboard.writeText(snippet.textContent ?? '').then(() => { copyBtn.textContent = 'Copied'; }, fallback);
     } else { fallback(); }
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
   });

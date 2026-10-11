@@ -3,20 +3,31 @@
   "version": "0.1.0",
   "description": "A color photocopy overlay and copier-style sheet transitions for web apps. Two parts, usable separately.",
   "type": "module",
-  "main": "./src/index.js",
+  "main": "./lib/index.js",
   "exports": {
-    ".": "./src/index.js",
-    "./overlay": "./src/overlay.js",
-    "./sheets": "./src/sheets.js",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./overlay": {
+      "types": "./lib/overlay.d.ts",
+      "default": "./lib/overlay.js"
+    },
+    "./sheets": {
+      "types": "./lib/sheets.d.ts",
+      "default": "./lib/sheets.js"
+    },
     "./dist/*": "./dist/*"
   },
   "files": [
-    "src",
+    "lib",
     "dist"
   ],
   "scripts": {
-    "build": "node scripts/build.js",
-    "start": "node scripts/serve.js"
+    "build": "tsx scripts/build.ts",
+    "typecheck": "tsc && tsc -p demo --noEmit && tsc -p scripts",
+    "start": "npm run build && tsx scripts/serve.ts",
+    "prepare": "tsx scripts/build.ts"
   },
   "keywords": [
     "photocopy",
@@ -32,5 +43,11 @@
     "url": "git+https://github.com/volonterx/photocopier-ui.git"
   },
   "homepage": "https://volonterx.github.io/photocopier-ui/",
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "types": "./lib/index.d.ts"
 }
