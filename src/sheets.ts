@@ -63,6 +63,8 @@ export interface Sheets {
   update(patch?: Partial<SheetsOptions>): void;
   isBusy(el: HTMLElement): boolean;
   readonly options: SheetsOptions;
+  finish(): void;
+  /** Same as finish(). */
   destroy(): void;
 }
 
@@ -171,10 +173,10 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
 
   function timing(call: CallOptions = {}) {
     return {
-      feed: num(call.feedDuration, num(o.feedDuration, 700)),
-      hold: num(call.holdDuration, num(o.holdDuration, 250)),
-      scan: num(call.scanDuration, num(o.scanDuration, 2600)),
-      close: num(call.closeDuration, num(o.closeDuration, 500)),
+      feed: num(call.feedDuration, o.feedDuration),
+      hold: num(call.holdDuration, o.holdDuration),
+      scan: num(call.scanDuration, o.scanDuration),
+      close: num(call.closeDuration, o.closeDuration),
       bar: call.bar || o.bar,
       thickness: call.barThickness != null ? num(call.barThickness, 0) : o.barThickness != null ? num(o.barThickness, 0) : null
     };
@@ -273,6 +275,16 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
     return promise.finally(() => busy.delete(el));
   }
 
+  // Runs when a scan or slide has finished: drops the animations and the scan layer, then reports the end.
+  function finish(el: HTMLElement, list: Animation[], parts: ScanParts | null, restore: () => void, action: MotionAction): Promise<void> {
+    return track(el, settle(list).then(() => {
+      list.forEach((a) => a.cancel());
+      if (parts) parts.fx.remove();
+      restore();
+      emit(el, MOTION_END, action);
+    }));
+  }
+
   /** Slides `el` up as a blank sheet, then scans its content in. Removes `hidden` first. */
   function present(el: HTMLElement, call?: CallOptions): Promise<void> {
     if (busy.has(el)) return busy.get(el)!;
@@ -289,12 +301,7 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
       { duration: t.feed, easing: o.openEasing, fill: 'backwards' })];
     if (parts) list.push(...sweep(parts, h, t.scan, t.feed + t.hold));
 
-    return track(el, settle(list).then(() => {
-      list.forEach((a) => a.cancel());
-      if (parts) parts.fx.remove();
-      restore();
-      emit(el, MOTION_END, 'present');
-    }));
+    return finish(el, list, parts, restore, 'present');
   }
 
   /** Scans content into `el` in place, without sliding. Useful for page loads and content swaps. */
@@ -310,12 +317,7 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
     emit(el, MOTION_START, 'reveal');
     const list = sweep(parts, h, t.scan, 0);
 
-    return track(el, settle(list).then(() => {
-      list.forEach((a) => a.cancel());
-      parts.fx.remove();
-      restore();
-      emit(el, MOTION_END, 'reveal');
-    }));
+    return finish(el, list, parts, restore, 'reveal');
   }
 
   /** Slides `el` down out of view, then sets `hidden`. */
@@ -335,6 +337,8 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
     }));
   }
 
+  function finishAll(): void { running.forEach((a) => a.finish()); running.clear(); }
+
   return {
     present,
     dismiss,
@@ -343,6 +347,8 @@ export function create(opts: Partial<SheetsOptions> = {}): Sheets {
     isBusy(el: HTMLElement) { return busy.has(el); },
     get options() { return Object.assign({}, o); },
     /** Jumps any running animation to its end. */
-    destroy() { running.forEach((a) => a.finish()); running.clear(); }
+    finish: finishAll,
+    /** Same as finish(), kept for older code. */
+    destroy: finishAll
   };
 }

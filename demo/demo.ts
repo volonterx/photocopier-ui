@@ -10,6 +10,29 @@
   interface Line { color: string; stops: [string, number][]; vessel: string; fare: string }
   interface Departure { t: string; line: LineId; pier: string; status: Status }
 
+  /* ---------- Theme toggle ---------- */
+  const themeBtn = $<HTMLButtonElement>('#themeToggle');
+  const isDark = () => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  };
+  const syncTheme = () => {
+    themeBtn.setAttribute('aria-pressed', String(isDark()));
+    themeBtn.textContent = isDark() ? 'Light theme' : 'Dark theme';
+  };
+  themeBtn.addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('pcui-theme', next); } catch (e) { /* storage unavailable */ }
+    syncTheme();
+    overlay.update({ theme: next });
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    syncTheme();
+    if (!document.documentElement.dataset.theme) overlay.update({ theme: isDark() ? 'dark' : 'light' });
+  });
+  syncTheme();
+
   /* ---------- Sample data ---------- */
   const LINES: Record<LineId, Line> = {
     A: { color: '#f2611c', stops: [['Kauppatori', 0], ['Suomenlinna main quay', 15]], vessel: 'MS Lokki', fare: '€5.90' },
@@ -62,7 +85,7 @@
   /* ---------- Library setup ---------- */
   const app = $('#app');
   const level = $<HTMLInputElement>('#level');
-  const overlay = Overlay.mount($('#stage'), { target: app, level: +level.value / 100 });
+  const overlay = Overlay.mount($('#stage'), { mode: 'svg-backdrop', target: app, level: +level.value / 100, theme: isDark() ? 'dark' : 'light' });
   const sheets = Sheets.create({
     scanDuration: +$<HTMLInputElement>('#scanDur').value * 1000,
     feedDuration: +$<HTMLInputElement>('#openDur').value * 1000,

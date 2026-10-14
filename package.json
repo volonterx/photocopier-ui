@@ -26,7 +26,7 @@
   "scripts": {
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc && tsc -p demo --noEmit && tsc -p scripts",
-    "start": "npm run build && tsx scripts/serve.ts",
+    "start": "tsx scripts/dev.ts",
     "prepare": "tsx scripts/build.ts",
     "dev": "tsx scripts/dev.ts"
   },

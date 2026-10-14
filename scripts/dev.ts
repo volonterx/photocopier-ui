@@ -6,7 +6,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { extname, join, normalize, dirname } from 'node:path';
+import { extname, join, normalize, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,7 +57,7 @@ createServer(async (req, res) => {
     }
     if (path === '/') { res.writeHead(302, { Location: '/demo/' }); return res.end(); }
     let file = normalize(join(root, path));
-    if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
+    if (relative(root, file).startsWith('..') || isAbsolute(relative(root, file))) { res.writeHead(403); return res.end(); }
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
     let body: Buffer | string = await readFile(file);
     if (extname(file) === '.html') body = body.toString().replace('</body>', reloadSnippet + '</body>');

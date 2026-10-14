@@ -28,10 +28,11 @@
    */
   const MOTION_START = 'pcui:motionstart';
   const MOTION_END = 'pcui:motionend';
-  const TEX_KEYS = { speckle: 1, streaks: 1, dust: 1, edge: 1, seed: 1, cast: 1 };
+  const TEX_KEYS = { theme: 1, speckle: 1, streaks: 1, dust: 1, edge: 1, seed: 1, cast: 1 };
   let seq = 0;
   const defaults = {
       mode: 'overlay',
+      theme: 'auto', // 'dark' draws the textures as light and colored marks, which show on dark pages; 'auto' follows prefers-color-scheme
       fixed: false, // true: layers are position:fixed and cover the viewport
       target: null, // element graded in 'filter' mode (fixed mode default: <html>)
       zIndex: 2147483000,
@@ -60,6 +61,9 @@
           t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
           return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       };
+  }
+  function prefersDark() {
+      return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
   }
   function isChromium() {
       const b = navigator.userAgentData?.brands;
@@ -123,40 +127,49 @@
       const hostW = () => (fixed ? window.innerWidth : host.clientWidth);
       const hostH = () => (fixed ? window.innerHeight : host.clientHeight);
       /* ---------- SVG filter ---------- */
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', '0');
-      svg.setAttribute('height', '0');
-      svg.setAttribute('aria-hidden', 'true');
-      svg.setAttribute('focusable', 'false');
-      svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
-      svg.innerHTML =
-          '<filter id="' + uid + '" x="-1%" y="-1%" width="102%" height="102%" color-interpolation-filters="sRGB">' +
-              '<feTurbulence data-k="wn" type="fractalNoise" baseFrequency="0.006 0.02" numOctaves="2" seed="4" result="wn"/>' +
-              '<feDisplacementMap data-k="warp" in="SourceGraphic" in2="wn" scale="3" xChannelSelector="R" yChannelSelector="G" result="w"/>' +
-              '<feColorMatrix data-k="sat" in="w" type="saturate" values="1.45" result="s"/>' +
-              '<feColorMatrix data-k="hue" in="s" type="hueRotate" values="-8" result="h"/>' +
-              '<feColorMatrix in="h" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>' +
-              '<feColorMatrix in="h" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>' +
-              '<feColorMatrix in="h" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>' +
-              '<feOffset data-k="ro" in="r" dx="2" dy="0" result="ro"/>' +
-              '<feOffset data-k="bo" in="b" dx="-2" dy="1" result="bo"/>' +
-              '<feBlend in="ro" in2="g" mode="screen" result="rg"/>' +
-              '<feBlend in="rg" in2="bo" mode="screen" result="rgb"/>' +
-              '<feGaussianBlur data-k="blur" in="rgb" stdDeviation="0.4" result="bl"/>' +
-              '<feComponentTransfer in="bl">' +
-              '<feFuncR data-k="cr" type="table" tableValues="0 1"/>' +
-              '<feFuncG data-k="cg" type="table" tableValues="0 1"/>' +
-              '<feFuncB data-k="cb" type="table" tableValues="0 1"/>' +
-              '</feComponentTransfer>' +
-              '</filter>';
-      document.body.appendChild(svg);
-      const q = (k) => svg.querySelector('[data-k="' + k + '"]');
-      const f = {
-          wn: q('wn'), warp: q('warp'), sat: q('sat'), hue: q('hue'),
-          ro: q('ro'), bo: q('bo'), blur: q('blur'), cr: q('cr'), cg: q('cg'), cb: q('cb')
-      };
+      // Only the SVG modes use this filter, so it is built the first time one of them is active.
+      let svg = null;
+      let f;
+      function buildFilter() {
+          svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('width', '0');
+          svg.setAttribute('height', '0');
+          svg.setAttribute('aria-hidden', 'true');
+          svg.setAttribute('focusable', 'false');
+          svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+          svg.innerHTML =
+              '<filter id="' + uid + '" x="-1%" y="-1%" width="102%" height="102%" color-interpolation-filters="sRGB">' +
+                  '<feTurbulence data-k="wn" type="fractalNoise" baseFrequency="0.006 0.02" numOctaves="2" seed="4" result="wn"/>' +
+                  '<feDisplacementMap data-k="warp" in="SourceGraphic" in2="wn" scale="3" xChannelSelector="R" yChannelSelector="G" result="w"/>' +
+                  '<feColorMatrix data-k="sat" in="w" type="saturate" values="1.45" result="s"/>' +
+                  '<feColorMatrix data-k="hue" in="s" type="hueRotate" values="-8" result="h"/>' +
+                  '<feColorMatrix in="h" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>' +
+                  '<feColorMatrix in="h" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>' +
+                  '<feColorMatrix in="h" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>' +
+                  '<feOffset data-k="ro" in="r" dx="2" dy="0" result="ro"/>' +
+                  '<feOffset data-k="bo" in="b" dx="-2" dy="1" result="bo"/>' +
+                  '<feBlend in="ro" in2="g" mode="screen" result="rg"/>' +
+                  '<feBlend in="rg" in2="bo" mode="screen" result="rgb"/>' +
+                  '<feGaussianBlur data-k="blur" in="rgb" stdDeviation="0.4" result="bl"/>' +
+                  '<feComponentTransfer in="bl">' +
+                  '<feFuncR data-k="cr" type="table" tableValues="0 1"/>' +
+                  '<feFuncG data-k="cg" type="table" tableValues="0 1"/>' +
+                  '<feFuncB data-k="cb" type="table" tableValues="0 1"/>' +
+                  '</feComponentTransfer>' +
+                  '</filter>';
+          document.body.appendChild(svg);
+          const q = (k) => svg.querySelector('[data-k="' + k + '"]');
+          f = {
+              wn: q('wn'), warp: q('warp'), sat: q('sat'), hue: q('hue'),
+              ro: q('ro'), bo: q('bo'), blur: q('blur'), cr: q('cr'), cg: q('cg'), cb: q('cb')
+          };
+          applyFilterAttrs();
+      }
       function applyFilterAttrs() {
-          const m = +o.misregistration || 0;
+          if (!svg)
+              return;
+          // Dark pages hide fringes on dim edges, so the color plates drift further apart.
+          const m = (+o.misregistration || 0) * (isDark() ? 1.8 : 1);
           f.wn.setAttribute('seed', String((o.seed % 1000) | 0));
           f.warp.setAttribute('scale', String(o.wobble));
           f.sat.setAttribute('values', String(o.saturation));
@@ -195,9 +208,10 @@
       }
       const tone = layer('div', 'tone', 1);
       // Paper tint and dark textures share one multiply canvas (one full-screen blend instead of two).
-      const dark = layer('canvas', 'dark', 2, 'multiply');
-      const light = layer('canvas', 'light', 3, 'screen');
-      const layers = [tone, dark, light];
+      const multiplyLayer = layer('canvas', 'dark', 2, 'multiply');
+      const screenLayer = layer('canvas', 'light', 3, 'screen');
+      const layers = [tone, multiplyLayer, screenLayer];
+      const isDark = () => (o.theme === 'auto' ? prefersDark() : o.theme === 'dark');
       function toneCss() {
           return 'saturate(' + o.saturation + ') hue-rotate(' + o.hue + 'deg) contrast(' +
               (1 + 1.1 * o.contrast).toFixed(3) + ') brightness(1.04)' +
@@ -234,6 +248,8 @@
       function applyMode() {
           effective = effectiveMode();
           const lite = isLite();
+          if (effective !== 'overlay' && !svg)
+              buildFilter();
           const ref = 'url(#' + uid + ')';
           let backdrop = 'none';
           let tFilter = saved.tFilter;
@@ -248,8 +264,9 @@
           setBackdrop(backdrop);
           if (target)
               target.style.filter = tFilter;
-          // The white speck layer is barely visible; skipping it while moving saves a full-screen blend.
-          light.style.visibility = lite ? 'hidden' : '';
+          // On light pages the screen layer only holds faint white specks, so skipping it while moving saves
+          // a full-screen blend. On dark pages it holds every texture, so it stays.
+          screenLayer.style.visibility = lite && !isDark() ? 'hidden' : '';
           applyTransform();
       }
       // Multiplying by color C at opacity a equals multiplying by (1 - a) + a * C.
@@ -296,6 +313,7 @@
           g.putImageData(im, 0, 0);
       }
       function drawTextures() {
+          const darkPage = isDark();
           const w = hostW(), h = hostH();
           if (w < 2 || h < 2)
               return;
@@ -303,9 +321,9 @@
           const s = Math.max(1, Math.sqrt(w * h / 1800000));
           const u = 1 / s;
           const cw = Math.ceil(w / s), ch = Math.ceil(h / s);
-          dark.width = light.width = cw;
-          dark.height = light.height = ch;
-          const d = dark.getContext('2d'), l = light.getContext('2d');
+          multiplyLayer.width = screenLayer.width = cw;
+          multiplyLayer.height = screenLayer.height = ch;
+          const d = multiplyLayer.getContext('2d'), l = screenLayer.getContext('2d');
           d.globalCompositeOperation = 'source-over';
           d.globalAlpha = 1;
           d.fillStyle = castColor();
@@ -331,64 +349,94 @@
           mctx.putImageData(imgd, 0, 0);
           d.imageSmoothingEnabled = true;
           d.imageSmoothingQuality = 'high';
-          d.drawImage(mc, -cell / 2 * u, -cell / 2 * u, mw * cell * u, mh * cell * u);
+          if (darkPage) {
+              // Multiplying does nothing on a dark page, so the blotches become faint colored light.
+              l.globalCompositeOperation = 'lighter';
+              l.globalAlpha = 0.18;
+              l.filter = 'invert(1)';
+              l.imageSmoothingEnabled = true;
+              l.imageSmoothingQuality = 'high';
+              l.drawImage(mc, -cell / 2 * u, -cell / 2 * u, mw * cell * u, mh * cell * u);
+              l.filter = 'none';
+              l.globalAlpha = 1;
+          }
+          else {
+              d.drawImage(mc, -cell / 2 * u, -cell / 2 * u, mw * cell * u, mh * cell * u);
+          }
           // Fine grain and specks
-          if (grainTile && o.speckle > 0) {
+          if (o.speckle > 0) {
               d.globalAlpha = clamp(o.speckle, 0, 1);
               d.fillStyle = d.createPattern(grainTile, 'repeat');
               d.fillRect(0, 0, cw, ch);
               d.globalAlpha = 1;
               l.globalCompositeOperation = 'lighter';
-              l.globalAlpha = clamp(o.speckle * 1.2, 0, 1);
+              l.globalAlpha = clamp(o.speckle * (darkPage ? 0.7 : 1.2), 0, 1);
               l.fillStyle = l.createPattern(dropTile, 'repeat');
               l.fillRect(0, 0, cw, ch);
               l.globalAlpha = 1;
           }
           // Drum streaks (colored, fading in and out)
           const S = rng(o.seed * 17 + 3);
-          const pal = [[0, 185, 230], [232, 0, 150], [245, 205, 0], [70, 70, 70], [70, 70, 70]];
-          const n = Math.round(o.streaks * 28);
+          // Dark pages get bright plate colors drawn as light; light pages get the same inks multiplied.
+          const pal = darkPage
+              ? [[40, 200, 255], [255, 50, 175], [255, 225, 40], [200, 200, 210], [200, 200, 210]]
+              : [[0, 185, 230], [232, 0, 150], [245, 205, 0], [70, 70, 70], [70, 70, 70]];
+          const t = darkPage ? l : d;
+          if (darkPage)
+              t.globalCompositeOperation = 'lighter';
+          const n = Math.round(o.streaks * (darkPage ? 22 : 32));
           for (let i = 0; i < n; i++) {
               const x = S() * cw;
-              const wd = (0.6 + S() * 2.4) * u;
-              const a = Math.min(0.4, (0.05 + S() * 0.13) * (0.4 + o.streaks));
+              const wd = (0.6 + S() * 2.4) * u * (darkPage ? 1.8 : 1.1);
+              const a = Math.min(darkPage ? 0.2 : 0.55, (0.05 + S() * 0.13) * (0.4 + o.streaks) * (darkPage ? 1 : 2));
               const y0 = S() * ch * 0.7 - ch * 0.05;
               const len = ch * (0.25 + S() * 0.75);
               const c = pal[(S() * pal.length) | 0];
-              const col = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',';
-              const gr = d.createLinearGradient(0, y0, 0, y0 + len);
-              gr.addColorStop(0, col + '0)');
-              gr.addColorStop(0.12, col + a.toFixed(3) + ')');
-              gr.addColorStop(0.88, col + a.toFixed(3) + ')');
-              gr.addColorStop(1, col + '0)');
-              d.fillStyle = gr;
-              d.fillRect(x, y0, wd, len);
+              const strip = (sx, sw, rgb, alpha) => {
+                  const col = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',';
+                  const gr = t.createLinearGradient(0, y0, 0, y0 + len);
+                  gr.addColorStop(0, col + '0)');
+                  gr.addColorStop(0.12, col + alpha.toFixed(3) + ')');
+                  gr.addColorStop(0.88, col + alpha.toFixed(3) + ')');
+                  gr.addColorStop(1, col + '0)');
+                  t.fillStyle = gr;
+                  t.fillRect(sx, y0, sw, len);
+              };
+              strip(x, wd, c, a);
+              // Chromatic fringe: red and blue plates ride just off the line, like misregistered toner.
+              if (darkPage) {
+                  const gap = wd * 0.5 + 0.8 * u, fw = Math.max(wd * 0.7, 0.8 * u);
+                  strip(x - gap - fw, fw, [255, 40, 70], a * 0.45);
+                  strip(x + wd + gap, fw, [50, 130, 255], a * 0.45);
+              }
           }
           // Wide faint bands
-          const nb = Math.round(o.streaks * 4);
+          const nb = Math.round(o.streaks * (darkPage ? 3.5 : 4));
           for (let i = 0; i < nb; i++) {
               const x = S() * cw;
               const bw = (25 + S() * 80) * u;
-              const ba = (0.03 + 0.04 * o.streaks).toFixed(3);
-              const hg = d.createLinearGradient(x, 0, x + bw, 0);
-              hg.addColorStop(0, 'rgba(60,60,60,0)');
-              hg.addColorStop(0.5, 'rgba(60,60,60,' + ba + ')');
-              hg.addColorStop(1, 'rgba(60,60,60,0)');
-              d.fillStyle = hg;
-              d.fillRect(x, 0, bw, ch);
+              const ba = ((0.03 + 0.04 * o.streaks) * (darkPage ? 1.5 : 1)).toFixed(3);
+              const bc = darkPage ? '200,205,215' : '60,60,60';
+              const hg = t.createLinearGradient(x, 0, x + bw, 0);
+              hg.addColorStop(0, 'rgba(' + bc + ',0)');
+              hg.addColorStop(0.5, 'rgba(' + bc + ',' + ba + ')');
+              hg.addColorStop(1, 'rgba(' + bc + ',0)');
+              t.fillStyle = hg;
+              t.fillRect(x, 0, bw, ch);
           }
           // Horizontal roller banding
           if (o.streaks > 0.15) {
               const spacing = (170 + S() * 60) * u;
               for (let y = S() * spacing; y < ch; y += spacing) {
                   const bh = (6 + S() * 16) * u;
-                  const ha = (0.06 * o.streaks).toFixed(3);
-                  const vg = d.createLinearGradient(0, y, 0, y + bh);
-                  vg.addColorStop(0, 'rgba(90,70,60,0)');
-                  vg.addColorStop(0.5, 'rgba(90,70,60,' + ha + ')');
-                  vg.addColorStop(1, 'rgba(90,70,60,0)');
-                  d.fillStyle = vg;
-                  d.fillRect(0, y, cw, bh);
+                  const ha = (0.06 * o.streaks * (darkPage ? 1.8 : 1)).toFixed(3);
+                  const hc = darkPage ? '210,190,170' : '90,70,60';
+                  const vg = t.createLinearGradient(0, y, 0, y + bh);
+                  vg.addColorStop(0, 'rgba(' + hc + ',0)');
+                  vg.addColorStop(0.5, 'rgba(' + hc + ',' + ha + ')');
+                  vg.addColorStop(1, 'rgba(' + hc + ',0)');
+                  t.fillStyle = vg;
+                  t.fillRect(0, y, cw, bh);
               }
           }
           // Lid shadow and vignette
@@ -418,22 +466,23 @@
           for (let i = 0; i < nd; i++) {
               const x = D() * cw, y = D() * ch;
               const rr = (0.5 + Math.pow(D(), 3) * 2.4) * u;
-              d.fillStyle = 'rgba(25,20,20,' + (0.35 + D() * 0.5).toFixed(2) + ')';
-              d.beginPath();
-              d.arc(x, y, rr, 0, 6.2832);
-              d.fill();
+              t.fillStyle = (darkPage ? 'rgba(235,228,215,' : 'rgba(25,20,20,') + (0.35 + D() * 0.5).toFixed(2) + ')';
+              t.beginPath();
+              t.arc(x, y, rr, 0, 6.2832);
+              t.fill();
           }
           const nh = Math.round(o.dust * 5);
           for (let i = 0; i < nh; i++) {
               const x = D() * cw, y = D() * ch;
-              d.strokeStyle = 'rgba(30,25,25,0.55)';
-              d.lineWidth = (0.5 + D() * 0.7) * u;
-              d.beginPath();
-              d.moveTo(x, y);
-              d.quadraticCurveTo(x + (D() - 0.5) * 40 * u, y + (D() - 0.5) * 40 * u, x + (D() - 0.5) * 70 * u, y + (D() - 0.5) * 70 * u);
-              d.stroke();
+              t.strokeStyle = darkPage ? 'rgba(225,218,205,0.6)' : 'rgba(30,25,25,0.55)';
+              t.lineWidth = (0.5 + D() * 0.7) * u * (darkPage ? 1.3 : 1);
+              t.beginPath();
+              t.moveTo(x, y);
+              t.quadraticCurveTo(x + (D() - 0.5) * 40 * u, y + (D() - 0.5) * 40 * u, x + (D() - 0.5) * 70 * u, y + (D() - 0.5) * 70 * u);
+              t.stroke();
           }
           d.globalCompositeOperation = 'source-over';
+          l.globalCompositeOperation = 'source-over';
       }
       function schedule() {
           if (raf)
@@ -452,6 +501,11 @@
       else {
           window.addEventListener('resize', schedule);
       }
+      const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+      const onScheme = () => { if (o.theme === 'auto')
+          schedule(); };
+      if (scheme)
+          scheme.addEventListener('change', onScheme);
       /* ---------- Motion hint from Sheets (or anything else) ---------- */
       function onMotion(e) {
           if (!fixed && !host.contains(e.target))
@@ -505,10 +559,13 @@
               ro.disconnect();
           else
               window.removeEventListener('resize', schedule);
+          if (scheme)
+              scheme.removeEventListener('change', onScheme);
           document.removeEventListener(MOTION_START, onMotion);
           document.removeEventListener(MOTION_END, onMotion);
           layers.forEach((n) => n.remove());
-          svg.remove();
+          if (svg)
+              svg.remove();
           if (target) {
               target.style.filter = saved.tFilter;
               target.style.transform = saved.tTransform;
@@ -520,7 +577,6 @@
           }
       }
       buildTiles();
-      applyFilterAttrs();
       applyMode();
       schedule();
       return {

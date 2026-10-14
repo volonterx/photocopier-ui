@@ -50,6 +50,7 @@ To cover a single container instead of the viewport, mount it on that element an
 | `level` | none | One knob, 0 to 1, that sets all the look settings below together. |
 | `fixed` | `false` | Cover the viewport instead of the host element. |
 | `mode` | `'overlay'` | `'overlay'` works in every browser. `'svg-backdrop'` adds color plate misregistration and wobble, Chromium only. `'filter'` runs the filter on `target` and can skew it, but costs more. |
+| `theme` | `'auto'` | `'light'`, `'dark'` or `'auto'` (follows `prefers-color-scheme`). On dark pages the textures are drawn as light and colored marks, because dark marks would not show. Change it later with `overlay.update({ theme })`. |
 | `target` | none | Element graded in `'filter'` mode. |
 | `saturation`, `contrast`, `hue`, `cast`, `softness` | | Color: punch, contrast, color drift in degrees, warm or cool paper tint, toner bleed. |
 | `speckle`, `streaks`, `dust`, `edge` | | Texture amounts, 0 to 1. |
@@ -83,7 +84,7 @@ The element you animate should cover the area it slides over (for a modal: posit
 
 Change options later with `sheets.update({ ... })`, or per call: `sheets.present(el, { scanDuration: 1200, bar: 'line', barThickness: 3 })`. Per-call options can set `scanDuration`, `feedDuration`, `holdDuration`, `closeDuration`, `bar` and `barThickness`.
 
-Other members: `sheets.isBusy(el)` is true while `el` is animating (a second call on it returns the running promise), `sheets.options` returns the current options, and `sheets.destroy()` jumps running animations to their end.
+Other members: `sheets.isBusy(el)` is true while `el` is animating (a second call on it returns the running promise), `sheets.options` returns the current options, and `sheets.finish()` jumps running animations to their end (`sheets.destroy()` does the same and is kept for older code).
 
 Sheets doesn't manage focus. A typical modal makes the page behind it `inert` while it's open and moves focus in and back:
 
@@ -131,10 +132,10 @@ When both parts are on a page, Sheets dispatches `pcui:motionstart` and `pcui:mo
 npm run build      # compiles src/, demo/ and checks scripts/; regenerates lib/, demo/demo.js and dist/
 npm run typecheck  # type-checks src/, demo/ and scripts/
 npm run dev        # serves http://localhost:8080/demo/, rebuilds and reloads the page on changes
-npm start          # builds once, then serves the same address
+npm start          # same as npm run dev
 ```
 
-`src/` holds the TypeScript sources; `lib/` (git-ignored) holds the compiled ES modules and `.d.ts` types the package exports. `demo/demo.ts` compiles to `demo/demo.js` (git-ignored); `npm start` builds first. `dist/` holds script-tag builds and is committed so the files can be used straight from the repo.
+`src/` holds the TypeScript sources; `lib/` (git-ignored) holds the compiled ES modules and `.d.ts` types the package exports. `demo/demo.ts` compiles to `demo/demo.js` (git-ignored); `npm run dev` builds it first. `dist/` holds script-tag builds and is committed so the files can be used straight from the repo.
 
 ## Demo on GitHub Pages
 

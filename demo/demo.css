@@ -16,12 +16,24 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #12161b; --surface: #1b2128; --fg: #e5e9ee; --muted: #98a4b2; --line: #303843;
     --field: #0f1318; --accent: #4cc48c; --accent-fg: #07170f; --glass: #0b0e12;
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #12161b; --surface: #1b2128; --fg: #e5e9ee; --muted: #98a4b2; --line: #303843;
+  --field: #0f1318; --accent: #4cc48c; --accent-fg: #07170f; --glass: #0b0e12;
+  color-scheme: dark;
+}
+
+.top-actions { display: flex; align-items: center; gap: 16px; }
+.theme-toggle {
+  font: 500 13px var(--font-sans); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--accent); }
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -44,7 +56,7 @@ h1 { font: 600 22px/1.2 var(--font-sans); margin: 0; letter-spacing: -0.01em; te
 .stage-col { min-width: 0; }
 
 .glass { background: var(--glass); padding: 10px; border-radius: 10px; }
-.stage { position: relative; height: clamp(560px, 82vh, 760px); overflow: hidden; border-radius: 4px; background: #f1f1ee; }
+.stage { position: relative; height: clamp(560px, 82vh, 760px); overflow: hidden; border-radius: 4px; background: #1b1f25; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .panel h2 { font: 500 11px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
@@ -75,19 +87,44 @@ h1 { font: 600 22px/1.2 var(--font-sans); margin: 0; letter-spacing: -0.01em; te
 .code { display: flex; gap: 10px; align-items: flex-start; }
 pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 12px; font: 400 12.5px/1.55 var(--font-mono); color: var(--fg); }
 
-/* ---------- Sample app (fixed colors, independent of the page theme) ---------- */
+/* ---------- Sample app (follows the page theme; dark variants at the end of this section) ---------- */
 .app {
   --a-ink: #1b2330; --a-soft: #4d5868; --a-rule: rgba(27,35,48,.18);
   --a-orange: #f2611c; --a-teal: #0a9f9a; --a-pink: #df2d86; --a-blue: #2058d4;
   --a-green: #1f9a4d; --a-red: #d33a2c;
+  --a-inv: #fff; --a-paper: #f1f1ee; --a-paper-blend: normal; --a-note: #fbf7e9;
+  --a-hover: rgba(255, 214, 90, .28); --a-form: rgba(255,255,255,.6); --a-field: #fff; --a-field-line: #8e97a4;
+  --a-margin: rgba(214, 64, 64, .5); --a-lines: rgba(70, 120, 190, .26);
   --gutter: calc(8.6% + 10px);
   position: absolute; inset: 0; color: var(--a-ink); color-scheme: light;
   font: 400 14px/1.45 var(--font-sans); overflow: hidden;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app {
+    --a-ink: #e7ebf0; --a-soft: #a3adba; --a-rule: rgba(231,235,240,.22);
+  --a-orange: #ff7a3d; --a-teal: #2cc7c0; --a-pink: #f06aac; --a-blue: #6c93f2;
+  --a-green: #4cc48c; --a-red: #ff7466;
+  --a-inv: #12161b; --a-paper: #2b2f36; --a-paper-blend: multiply; --a-note: #23262c;
+  --a-hover: rgba(255, 214, 90, .14); --a-form: rgba(255,255,255,.06); --a-field: #14181d; --a-field-line: #5d6773;
+  --a-margin: rgba(240, 100, 100, .55); --a-lines: rgba(130, 170, 235, .22);
+  color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] .app {
+  --a-ink: #e7ebf0; --a-soft: #a3adba; --a-rule: rgba(231,235,240,.22);
+  --a-orange: #ff7a3d; --a-teal: #2cc7c0; --a-pink: #f06aac; --a-blue: #6c93f2;
+  --a-green: #4cc48c; --a-red: #ff7466;
+  --a-inv: #12161b; --a-paper: #2b2f36; --a-paper-blend: multiply; --a-note: #23262c;
+  --a-hover: rgba(255, 214, 90, .14); --a-form: rgba(255,255,255,.06); --a-field: #14181d; --a-field-line: #5d6773;
+  --a-margin: rgba(240, 100, 100, .55); --a-lines: rgba(130, 170, 235, .22);
+  color-scheme: dark;
+}
+
 /* Paper 1: tractor-feed computer paper for the departures page */
 .paper-feed {
-  background-color: #f1f1ee;
+  background-color: var(--a-paper);
+  background-blend-mode: var(--a-paper-blend);
   background-image: url("assets/tractor-feed.jpg");
   background-repeat: repeat-y;
   background-size: 100% auto;
@@ -96,11 +133,11 @@ pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--fiel
 
 /* Paper 2: ruled notepad stock for the details sheet */
 .paper-notepad {
-  background-color: #fbf7e9;
+  background-color: var(--a-note);
   background-image:
-    linear-gradient(90deg, transparent calc(var(--gutter) - 16px), rgba(214, 64, 64, .5) calc(var(--gutter) - 16px),
-      rgba(214, 64, 64, .5) calc(var(--gutter) - 14px), transparent calc(var(--gutter) - 14px)),
-    repeating-linear-gradient(to bottom, transparent 0 27px, rgba(70, 120, 190, .26) 27px 28px);
+    linear-gradient(90deg, transparent calc(var(--gutter) - 16px), var(--a-margin) calc(var(--gutter) - 16px),
+      var(--a-margin) calc(var(--gutter) - 14px), transparent calc(var(--gutter) - 14px)),
+    repeating-linear-gradient(to bottom, transparent 0 27px, var(--a-lines) 27px 28px);
   background-attachment: local;
 }
 
@@ -120,7 +157,7 @@ pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--fiel
   padding: 11px 10px; border: 0; border-bottom: 1px dashed var(--a-rule); background: transparent;
   font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 4px;
 }
-.dep:hover { background: rgba(255, 214, 90, .28); }
+.dep:hover { background: var(--a-hover); }
 .dep:focus-visible { outline: 2px solid var(--a-pink); outline-offset: -2px; }
 .dep time { font: 600 17px var(--font-mono); font-variant-numeric: tabular-nums; }
 .dep .to { font-weight: 600; display: block; }
@@ -129,7 +166,7 @@ pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--fiel
 .badge { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font: 600 12px var(--font-sans); flex: none; }
 .chip { font: 500 11px var(--font-mono); padding: 2px 7px; border-radius: 3px; white-space: nowrap; border: 1px solid currentColor; }
 .chip.ok { color: var(--a-green); }
-.chip.board { color: #fff; background: var(--a-green); border-color: var(--a-green); }
+.chip.board { color: var(--a-inv); background: var(--a-green); border-color: var(--a-green); }
 .chip.late { color: var(--a-red); }
 .chev { color: var(--a-soft); font-size: 16px; line-height: 1; }
 @media (max-width: 520px) { .dep .chip { display: none; } .cols span:last-child { visibility: hidden; } }
@@ -141,7 +178,7 @@ pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--fiel
 .back {
   position: sticky; top: 12px; z-index: 1; align-self: flex-start;
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px 7px 10px; border-radius: 999px;
-  border: 0; background: var(--a-ink); color: #fff; font: 500 13px var(--font-sans); cursor: pointer;
+  border: 0; background: var(--a-ink); color: var(--a-inv); font: 500 13px var(--font-sans); cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,.25);
 }
 .back svg { width: 18px; height: 18px; }
@@ -173,9 +210,9 @@ pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; background: var(--fiel
 .stops li:last-child::after { display: none; }
 .stops time { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 
-.t-form { display: flex; flex-direction: column; gap: 9px; padding: 14px; border: 2px solid var(--a-ink); border-radius: 8px; background: rgba(255,255,255,.6); }
+.t-form { display: flex; flex-direction: column; gap: 9px; padding: 14px; border: 2px solid var(--a-ink); border-radius: 8px; background: var(--a-form); }
 .t-form label { font-weight: 600; font-size: 13px; }
-.t-form input[type="text"] { font: 400 14px var(--font-sans); padding: 9px 10px; border: 1px solid #8e97a4; border-radius: 6px; background: #fff; color: var(--a-ink); width: 100%; }
+.t-form input[type="text"] { font: 400 14px var(--font-sans); padding: 9px 10px; border: 1px solid var(--a-field-line); border-radius: 6px; background: var(--a-field); color: var(--a-ink); width: 100%; }
 .t-form .chk { display: flex; align-items: center; gap: 8px; font-weight: 400; }
 .t-form button { font: 600 14px var(--font-sans); padding: 11px 14px; border-radius: 6px; border: 0; color: #fff; background: var(--a-blue); cursor: pointer; }
 .t-form input:focus-visible, .t-form button:focus-visible { outline: 2px solid var(--a-pink); outline-offset: 2px; }

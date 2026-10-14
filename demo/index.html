@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="demo.css">
+  <script>try { var t = localStorage.getItem('pcui-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
 </head>
 <body>
 <div class="wrap">
@@ -17,7 +18,10 @@
       <h1>photocopier-ui</h1>
       <p class="lede">Tap any departure. A blank sheet feeds up from the bottom and the scanner copies the details onto it. Use Back to slide the sheet away. The two papers come from the demo's own CSS, not from the library.</p>
     </div>
-    <a class="repo" href="https://github.com/volonterx/photocopier-ui">Source on GitHub</a>
+    <div class="top-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">Dark theme</button>
+      <a class="repo" href="https://github.com/volonterx/photocopier-ui">Source on GitHub</a>
+    </div>
   </header>
 
   <main class="demo">
