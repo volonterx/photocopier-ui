@@ -350,7 +350,7 @@ export function mount(hostEl?: HTMLElement | null, opts: OverlayInit = {}): Over
     im = g.createImageData(T, T); p = im.data;
     for (let i = 0; i < T * T; i++) {
       const w = R() < 0.004 ? 120 + R() * 135 : 0;
-      p[i * 4] = w; p[i * 4 + 1] = w; p[i * 4 + 2] = w; p[i * 4 + 3] = 255;
+      p[i * 4] = 255; p[i * 4 + 1] = 255; p[i * 4 + 2] = 255; p[i * 4 + 3] = w; // white specks, transparent elsewhere
     }
     g.putImageData(im, 0, 0);
   }
@@ -369,8 +369,9 @@ export function mount(hostEl?: HTMLElement | null, opts: OverlayInit = {}): Over
 
     d.globalCompositeOperation = 'source-over'; d.globalAlpha = 1;
     d.fillStyle = castColor(); d.fillRect(0, 0, cw, ch);
+    // The screen layer starts transparent (resizing the canvas cleared it). Screening a transparent pixel changes
+    // nothing, so there is no frame where an opaque black canvas could show through before blending kicks in.
     l.globalCompositeOperation = 'source-over'; l.globalAlpha = 1;
-    l.fillStyle = '#000'; l.fillRect(0, 0, cw, ch);
     d.globalCompositeOperation = 'multiply';
 
     // Uneven toner: soft colored blotches
