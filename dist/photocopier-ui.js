@@ -1,4 +1,4 @@
-/*! photocopier-ui v0.3.0 | Overlay + Sheets | script-tag build, generated from src/*.ts */
+/*! photocopier-ui v0.4.0 | Overlay + Sheets | script-tag build, generated from src/*.ts */
 (function (global) {
   'use strict';
   /**
